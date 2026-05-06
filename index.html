@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/date-holidays@3/dist/date-holidays.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@hyunbinseo/holidays-kr@3/dist/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <style>
   :root {
@@ -67,6 +67,7 @@
   .day.saturday .day-num { color: #2563EB; }
   .day.sunday   .day-num { color: #DC2626; }
   .day.together .day-num { color: #7A6010; }
+  .day.holiday  .day-num { color: #DC2626; }
   .day.today .day-num { font-weight: 700; color: #DC2626; }
   .tag-holiday { background: #FEE2E2; color: #991B1B; font-size: 8.5px; padding: 1px 4px; border-radius: 3px; font-weight: 600; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .divider-line { height: 1px; background: var(--border); margin: 1px 0; flex-shrink: 0; }
@@ -334,13 +335,14 @@ const CREW_DEFAULT = {
   31: { type:'rdo',    flight:'',          note:'' },
 };
 
-// ── 한국 공휴일 ──
-let _hd = null;
+// ── 한국 공휴일 (@hyunbinseo/holidays-kr) ──
 function getHoliday(dateKey) {
-  if (!_hd) { try { _hd = new Holidays('KR'); } catch(e) { return null; } }
-  const res = _hd.isHoliday(new Date(dateKey + 'T12:00:00'));
-  if (!res) return null;
-  return (res.find(h => h.type === 'public') || res[0])?.name || null;
+  try {
+    const date = new Date(dateKey + 'T12:00:00');
+    if (!isHoliday(date)) return null;
+    const names = getHolidayNames(date);
+    return names?.[0] || null;
+  } catch(e) { return null; }
 }
 
 const TAG_CLASS  = { flight:'tag-flight', rest:'tag-flight', off:'tag-off', rdo:'tag-rdo', stb:'tag-stb', sth:'tag-sth' };
@@ -504,6 +506,7 @@ function renderGrid() {
       (together        ? ' together' : '') +
       (dow === 6       ? ' saturday' : '') +
       (dow === 0       ? ' sunday'   : '') +
+      (holiday         ? ' holiday'  : '') +
       (key===TODAY_KEY ? ' today'    : '');
     cell.onclick = () => openModal(key);
 
