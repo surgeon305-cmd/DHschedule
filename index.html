@@ -30,7 +30,7 @@
     --accent: #C8A84A; --radius: 10px; --radius-sm: 6px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
   .page { max-width: 900px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
 
   .header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border); }
@@ -58,7 +58,7 @@
   .cal-wrapper { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
   .cal-dow-cell { text-align: center; font-size: 11px; font-weight: 500; color: var(--text3); padding: 4px 0; letter-spacing: .08em; }
 
-  .day { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 6px 7px; min-height: 78px; cursor: pointer; transition: border-color .15s, box-shadow .15s; position: relative; display: flex; flex-direction: column; gap: 3px; }
+  .day { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 6px 7px; min-height: 78px; min-width: 0; overflow: hidden; cursor: pointer; transition: border-color .15s, box-shadow .15s; position: relative; display: flex; flex-direction: column; gap: 3px; }
   .day:hover { border-color: var(--border2); box-shadow: 0 2px 8px rgba(0,0,0,.06); z-index: 1; }
   .day.empty { background: transparent; border-color: transparent; cursor: default; pointer-events: none; }
   .day.together { background: var(--together-bg); border-color: var(--together-border); }
@@ -68,9 +68,9 @@
   .day.sunday   .day-num { color: #DC2626; }
   .day.together .day-num { color: #7A6010; }
   .day.today .day-num { font-weight: 700; color: #DC2626; }
-  .tag-holiday { background: #FEE2E2; color: #991B1B; font-size: 8.5px; padding: 1px 4px; border-radius: 3px; font-weight: 600; flex-shrink: 0; }
+  .tag-holiday { background: #FEE2E2; color: #991B1B; font-size: 8.5px; padding: 1px 4px; border-radius: 3px; font-weight: 600; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .divider-line { height: 1px; background: var(--border); margin: 1px 0; flex-shrink: 0; }
-  .tag { font-size: 9.5px; font-weight: 500; padding: 2px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; flex-shrink: 0; }
+  .tag { font-size: 9.5px; font-weight: 500; padding: 2px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; flex-shrink: 1; min-width: 0; max-width: 100%; }
   .tag-flight { background: var(--crew-bg); color: var(--crew-text); }
   .tag-rest   { background: var(--rest-bg); color: var(--rest-text); }
   .tag-off    { background: var(--off-bg);  color: var(--off-text);  }
