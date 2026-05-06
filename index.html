@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/date-holidays@3/dist/date-holidays.min.js"></script>
 <style>
   :root {
     --bg: #F7F5F0; --bg2: #EFEDE6; --bg3: #E5E2D8;
@@ -58,8 +59,10 @@
   .day.together { background: var(--together-bg); border-color: var(--together-border); }
   .day.today { border-color: var(--accent); border-width: 1.5px; }
   .day-num { font-size: 12px; font-weight: 500; color: var(--text); font-family: 'DM Mono', monospace; line-height: 1; margin-bottom: 2px; }
-  .day.weekend .day-num { color: var(--text3); }
+  .day.saturday .day-num { color: #2563EB; }
+  .day.sunday   .day-num { color: #DC2626; }
   .day.together .day-num { color: #7A6010; }
+  .tag-holiday { background: #FEE2E2; color: #991B1B; font-size: 8.5px; padding: 1px 4px; border-radius: 3px; font-weight: 600; flex-shrink: 0; }
   .divider-line { height: 1px; background: var(--border); margin: 1px 0; flex-shrink: 0; }
   .tag { font-size: 9.5px; font-weight: 500; padding: 2px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; flex-shrink: 0; }
   .tag-flight { background: var(--crew-bg); color: var(--crew-text); }
@@ -147,7 +150,7 @@
   </div>
 
   <div class="cal-dow">
-    <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+    <div style="color:#DC2626">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style="color:#2563EB">토</div>
   </div>
   <div class="cal-grid" id="calGrid"></div>
 
@@ -250,6 +253,15 @@ const CREW_DEFAULT = {
   31: { type:'rdo',    flight:'',          note:'' },
 };
 
+// ── 한국 공휴일 ──
+let _hd = null;
+function getHoliday(dateKey) {
+  if (!_hd) { try { _hd = new Holidays('KR'); } catch(e) { return null; } }
+  const res = _hd.isHoliday(new Date(dateKey + 'T12:00:00'));
+  if (!res) return null;
+  return (res.find(h => h.type === 'public') || res[0])?.name || null;
+}
+
 const TAG_CLASS  = { flight:'tag-flight', rest:'tag-flight', off:'tag-off', rdo:'tag-rdo', stb:'tag-stb', sth:'tag-sth' };
 const CREW_LABEL = { flight:'항공편', rest:'REST', off:'OFF', rdo:'RDO', stb:'STB 대기', sth:'STH 자택' };
 const DOW_KR     = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
@@ -283,13 +295,16 @@ function showToast(msg) {
 // ── 데이터 로드 ──
 async function fetchData() {
   loading(true);
-  const prefix = `${curYear}-${String(curMonth+1).padStart(2,'0')}`;
+  const mm    = String(curMonth + 1).padStart(2, '0');
+  const from  = `${curYear}-${mm}-01`;
+  const to    = `${curYear}-${mm}-31`;
   try {
-    const [{ data: evRows, error: e1 }, { data: jRows }] = await Promise.all([
-      db.from('calendar_events').select('*').like('date', prefix + '%'),
-      jumunDb.from('schedule').select('*').like('date', prefix + '%'),
+    const [{ data: evRows, error: e1 }, { data: jRows, error: e2 }] = await Promise.all([
+      db.from('calendar_events').select('*').gte('date', from).lte('date', to),
+      jumunDb.from('schedule').select('*').gte('date', from).lte('date', to),
     ]);
     if (e1) throw e1;
+    if (e2) console.warn('jumun 로드 실패:', e2.message);
     calData = {};
     (evRows || []).forEach(r => { calData[r.date] = r; });
     jumunData = {};
@@ -363,16 +378,25 @@ function renderGrid() {
     if (together) togethers++;
     if (row.custom_title) events++;
 
+    const holiday = getHoliday(key);
+
     const cell = document.createElement('div');
     cell.className = 'day' +
-      (together      ? ' together' : '') +
-      (dow===0||dow===6 ? ' weekend' : '') +
-      (key===TODAY_KEY  ? ' today'   : '');
+      (together        ? ' together' : '') +
+      (dow === 6       ? ' saturday' : '') +
+      (dow === 0       ? ' sunday'   : '') +
+      (key===TODAY_KEY ? ' today'    : '');
     cell.onclick = () => openModal(key);
 
     // 날짜 숫자
     const num = document.createElement('div');
     num.className = 'day-num'; num.textContent = d; cell.appendChild(num);
+
+    // 공휴일 태그
+    if (holiday) {
+      const ht = document.createElement('span');
+      ht.className = 'tag-holiday'; ht.textContent = holiday; cell.appendChild(ht);
+    }
 
     // 함께 마크
     if (together) {
