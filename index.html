@@ -269,7 +269,7 @@ const CREW_DEFAULT = {
   4:  { type:'flight', flight:'YP801/802', note:'0735~1845' },
   5:  { type:'off',    flight:'',          note:'' },
   6:  { type:'flight', flight:'YP111',     note:'1620~' },
-  7:  { type:'rest',   flight:'',          note:'' },
+  7:  { type:'rest',   flight:'YP112',     note:'' },        // SFO 체류
   8:  { type:'rest',   flight:'YP112',     note:'1425~' },
   9:  { type:'flight', flight:'YP112',     note:'~2040' },
   10: { type:'off',    flight:'',          note:'' },
@@ -281,15 +281,15 @@ const CREW_DEFAULT = {
   16: { type:'off',    flight:'',          note:'' },
   17: { type:'flight', flight:'YP731/732', note:'0710~1540' },
   18: { type:'flight', flight:'YP101',     note:'1120~' },
-  19: { type:'rest',   flight:'',          note:'' },
+  19: { type:'rest',   flight:'YP102',     note:'' },        // LAX 체류
   20: { type:'rest',   flight:'YP102',     note:'0945~' },
   21: { type:'flight', flight:'YP102',     note:'~1620' },
   22: { type:'off',    flight:'',          note:'' },
   23: { type:'off',    flight:'',          note:'' },
   24: { type:'sth',    flight:'',          note:'0600~1800' },
   25: { type:'flight', flight:'YP131',     note:'1945~2300' },
-  26: { type:'rest',   flight:'',          note:'' },
-  27: { type:'rest',   flight:'',          note:'2355~' },
+  26: { type:'rest',   flight:'YP132',     note:'' },        // JFK 체류
+  27: { type:'rest',   flight:'YP132',     note:'2355~' },   // JFK 체류, 귀국편 출발
   28: { type:'flight', flight:'YP132',     note:'' },
   29: { type:'flight', flight:'YP132',     note:'~0545' },
   30: { type:'rdo',    flight:'',          note:'' },
@@ -404,7 +404,7 @@ function getDayData(dateKey) {
 
   return {
     crew_type:     saved.crew_type    ?? def.type   ?? null,
-    crew_flight:   saved.crew_flight  ?? def.flight ?? '',
+    crew_flight:   saved.crew_flight  || def.flight || '',  // ||: 빈 문자열도 fallback
     crew_note:     saved.crew_note    ?? def.note   ?? '',
     doc_status:    docStatus,
     is_handover:   isHandover,
@@ -590,7 +590,9 @@ async function saveEdit() {
 
   const payload = {
     crew_type:    crewType,
-    crew_flight:  crewType==='flight' ? (document.getElementById('editFlight').value.trim() || def.flight || '') : '',
+    crew_flight:  (crewType==='flight' || crewType==='rest')
+                  ? (document.getElementById('editFlight').value.trim() || def.flight || '')
+                  : '',
     crew_note:    document.getElementById('editCrewNote').value.trim(),
     custom_title: document.getElementById('editTitle').value.trim(),
     custom_note:  document.getElementById('editNote').value.trim(),
