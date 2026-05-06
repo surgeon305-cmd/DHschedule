@@ -113,6 +113,8 @@
   .modal-title { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
   .modal-edit-btn { padding: 5px 12px; font-size: 12px; font-weight: 500; font-family: 'Noto Sans KR', sans-serif; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text2); cursor: pointer; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
   .modal-edit-btn:hover { background: var(--bg2); color: var(--text); }
+  .btn-del { padding: 3px 9px; font-size: 11px; font-family: 'Noto Sans KR', sans-serif; background: var(--bg); border: 1px solid #FCA5A5; border-radius: var(--radius-sm); color: #DC2626; cursor: pointer; transition: background .15s; white-space: nowrap; }
+  .btn-del:hover { background: #FEE2E2; }
   .view-section { margin-bottom: 12px; }
   .view-section-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
   .view-flight-link { font-size: 13px; font-weight: 600; color: var(--crew-text); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; background: var(--crew-bg); padding: 4px 10px; border-radius: 5px; }
@@ -655,8 +657,12 @@ function populateViewMode(row) {
   if (row.custom_title) {
     const ownerCls = row.event_owner === '도희' ? 'tag-custom-crew' : row.event_owner === '효중' ? 'tag-custom-doc' : 'tag-custom';
     customHtml = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">추가 일정</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">추가 일정</div>
+        <button class="btn-del" onclick="deleteCustomEvent()">삭제</button>
+      </div>
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--text3);font-weight:500">${row.event_owner}</span>
         <span class="tag ${ownerCls}" style="font-size:12px;padding:3px 8px">${row.custom_title}</span>
         ${row.custom_note ? `<span style="font-size:12px;color:var(--text2)">${row.custom_note}</span>` : ''}
       </div>
@@ -751,6 +757,26 @@ async function saveEdit() {
   loading(false);
   closeModal();
   renderGrid();
+}
+
+async function deleteCustomEvent() {
+  if (!editingDate) return;
+  const existing = calData[editingDate];
+  if (!existing?.id) return;
+  loading(true);
+  try {
+    const { error } = await db.from('calendar_events')
+      .update({ custom_title: '', custom_note: '', event_owner: '함께' })
+      .eq('id', existing.id);
+    if (error) throw error;
+    calData[editingDate] = { ...existing, custom_title: '', custom_note: '', event_owner: '함께' };
+    showToast('일정을 삭제했어요');
+    closeModal();
+    renderGrid();
+  } catch(e) {
+    showToast('삭제 실패 — 다시 시도해주세요');
+  }
+  loading(false);
 }
 
 // ── 일정 작성자 ──
