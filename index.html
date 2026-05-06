@@ -74,8 +74,14 @@
   .tag-doc-on  { background: var(--doc-bg);  color: var(--doc-text);  }
   .tag-doc-off { background: var(--off-bg);  color: var(--off-text);  }
   .tag-doc-empty { background: transparent; color: var(--text3); border: 1px dashed var(--border2); font-weight: 400; }
-  .tag-custom { background: var(--together-bg); color: #7A6010; border: 1px solid var(--together-border); }
+  .tag-custom      { background: var(--together-bg); color: #7A6010; border: 1px solid var(--together-border); }
+  .tag-custom-crew { background: var(--crew-bg); color: var(--crew-text); }
+  .tag-custom-doc  { background: var(--doc-bg);  color: var(--doc-text);  }
   .together-mark { position: absolute; top: 5px; right: 6px; font-size: 10px; }
+  .owner-selector { display: flex; gap: 6px; margin-bottom: 6px; }
+  .owner-btn { flex: 1; padding: 7px 4px; font-size: 12px; font-weight: 500; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text2); cursor: pointer; transition: all .15s; font-family: 'Noto Sans KR', sans-serif; }
+  .owner-btn.active { border-color: var(--accent); color: var(--text); background: var(--together-bg); }
+  .fetch-hint { font-size: 10px; color: var(--text3); margin-top: 3px; min-height: 14px; }
 
   .summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-top: 1.25rem; }
   .sum-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
@@ -185,15 +191,25 @@
         <option value="sth">STH — 자택 대기</option>
       </select>
       <div style="margin-top:6px">
-        <input type="text" id="editFlight" placeholder="항공편 번호 (예: YP801/802)" />
+        <input type="text" id="editFlight" placeholder="항공편 번호 (예: YP801/802)" oninput="onFlightInput(this.value)" />
       </div>
+      <div style="margin-top:6px">
+        <input type="text" id="editCrewNote" placeholder="시간 메모 (예: 0735~1845)" />
+      </div>
+      <div class="fetch-hint" id="flightHint"></div>
       <div class="section-label">효중 — 섬 근무 현황 (자동 연동)</div>
       <div class="doc-readonly" id="docReadonly">—</div>
     </div>
 
     <!-- 탭2: 일정 추가 -->
     <div id="tabCustom" style="display:none">
-      <div class="section-label" style="margin-top:0">일정 제목</div>
+      <div class="section-label" style="margin-top:0">누구의 일정?</div>
+      <div class="owner-selector">
+        <button class="owner-btn active" data-owner="함께" onclick="setOwner('함께')">함께</button>
+        <button class="owner-btn" data-owner="도희" onclick="setOwner('도희')">도희</button>
+        <button class="owner-btn" data-owner="효중" onclick="setOwner('효중')">효중</button>
+      </div>
+      <div class="section-label">일정 제목</div>
       <input type="text" id="editTitle" placeholder="예: 데이트, 병원, 가족모임" />
       <div class="section-label">메모 (선택)</div>
       <input type="text" id="editNote" placeholder="메모" />
@@ -265,6 +281,16 @@ function getHoliday(dateKey) {
 const TAG_CLASS  = { flight:'tag-flight', rest:'tag-flight', off:'tag-off', rdo:'tag-rdo', stb:'tag-stb', sth:'tag-sth' };
 const CREW_LABEL = { flight:'항공편', rest:'REST', off:'OFF', rdo:'RDO', stb:'STB 대기', sth:'STH 자택' };
 const DOW_KR     = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
+
+// REST일 체류 도시 (귀국편 번호 → 출발 도시)
+const LAYOVER_CITY = {
+  'YP102': 'LAX',  // Los Angeles
+  // 항공사 확인 후 추가: YP112, YP622, YP132 등
+};
+
+// AviationStack API (https://aviationstack.com — 무료: 월 100회)
+const AVIATIONSTACK_KEY = ''; // 발급받은 API 키 입력
+const _flightCache = {};
 
 // ── 유틸 ──
 function toKey(y, m, d) {
@@ -340,6 +366,7 @@ function getDayData(dateKey) {
     handover_time: handoverTime,
     custom_title:  saved.custom_title || '',
     custom_note:   saved.custom_note  || '',
+    event_owner:   saved.event_owner  || '함께',
   };
 }
 
@@ -407,8 +434,17 @@ function renderGrid() {
     // 도희 태그
     const crewTag = document.createElement('span');
     crewTag.className = 'tag ' + (TAG_CLASS[row.crew_type] || 'tag-off');
-    crewTag.textContent = row.crew_type==='flight' && row.crew_flight
-      ? row.crew_flight : (CREW_LABEL[row.crew_type] || row.crew_type);
+    let crewText;
+    if (row.crew_type === 'flight' && row.crew_flight) {
+      crewText = row.crew_flight;
+    } else if (row.crew_type === 'rest') {
+      crewText = 'REST';
+      const city = LAYOVER_CITY[row.crew_flight];
+      if (city) crewText += ' · ' + city;
+    } else {
+      crewText = CREW_LABEL[row.crew_type] || row.crew_type;
+    }
+    crewTag.textContent = crewText;
     cell.appendChild(crewTag);
 
     if (row.crew_note) {
@@ -429,8 +465,12 @@ function renderGrid() {
     // 추가 일정
     if (row.custom_title) {
       const evTag = document.createElement('span');
-      evTag.className = 'tag tag-custom';
-      evTag.textContent = '● ' + row.custom_title; cell.appendChild(evTag);
+      const ownerCls = row.event_owner === '도희' ? 'tag-custom-crew'
+                     : row.event_owner === '효중' ? 'tag-custom-doc'
+                     : 'tag-custom';
+      evTag.className = 'tag ' + ownerCls;
+      evTag.textContent = '● ' + row.custom_title;
+      cell.appendChild(evTag);
     }
 
     grid.appendChild(cell);
@@ -464,11 +504,14 @@ function openModal(dateKey) {
 
   document.getElementById('modalDate').textContent  = `${parts[0]}년 ${parts[1]}월 ${parts[2]}일`;
   document.getElementById('modalTitle').textContent = DOW_KR[new Date(dateKey+'T12:00:00').getDay()];
-  document.getElementById('editCrew').value   = row.crew_type;
-  document.getElementById('editFlight').value = row.crew_flight;
-  document.getElementById('editTitle').value  = row.custom_title;
-  document.getElementById('editNote').value   = row.custom_note;
+  document.getElementById('editCrew').value     = row.crew_type;
+  document.getElementById('editFlight').value   = row.crew_flight;
+  document.getElementById('editCrewNote').value = row.crew_note;
+  document.getElementById('flightHint').textContent = '';
+  document.getElementById('editTitle').value    = row.custom_title;
+  document.getElementById('editNote').value     = row.custom_note;
   document.getElementById('docReadonly').textContent = docLabel(ds, row.is_handover, row.handover_time);
+  setOwner(row.event_owner || '함께');
 
   switchTab('crew');
   document.getElementById('overlay').style.display = 'flex';
@@ -500,9 +543,10 @@ async function saveEdit() {
   const payload = {
     crew_type:    crewType,
     crew_flight:  crewType==='flight' ? (document.getElementById('editFlight').value.trim() || def.flight || '') : '',
-    crew_note:    def.note || '',
+    crew_note:    document.getElementById('editCrewNote').value.trim(),
     custom_title: document.getElementById('editTitle').value.trim(),
     custom_note:  document.getElementById('editNote').value.trim(),
+    event_owner:  getSelectedOwner(),
   };
 
   loading(true);
@@ -525,6 +569,56 @@ async function saveEdit() {
   loading(false);
   closeModal();
   renderGrid();
+}
+
+// ── 일정 작성자 ──
+function setOwner(owner) {
+  document.querySelectorAll('.owner-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.owner === owner);
+  });
+}
+function getSelectedOwner() {
+  return document.querySelector('.owner-btn.active')?.dataset.owner || '함께';
+}
+
+// ── 항공편 시간 조회 (AviationStack) ──
+async function fetchFlightInfo(rawNum) {
+  if (!AVIATIONSTACK_KEY) return null;
+  const iata = rawNum.split('/')[0].trim().toUpperCase();
+  if (!iata) return null;
+  if (_flightCache.hasOwnProperty(iata)) return _flightCache[iata];
+  try {
+    const apiUrl = `http://api.aviationstack.com/v1/flights?access_key=${AVIATIONSTACK_KEY}&flight_iata=${iata}`;
+    const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(apiUrl)}`, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) throw new Error(res.status);
+    const json = await res.json();
+    const f = json.data?.[0];
+    if (!f) { _flightCache[iata] = null; return null; }
+    const fmt = iso => { if (!iso) return ''; const d = new Date(iso); return `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`; };
+    const dep = fmt(f.departure?.scheduled);
+    const arr = fmt(f.arrival?.scheduled);
+    const info = { note: dep && arr ? `${dep}~${arr}` : dep || arr, dest: f.arrival?.iata || '' };
+    _flightCache[iata] = info;
+    return info;
+  } catch(e) { _flightCache[iata] = null; return null; }
+}
+
+let _flightTimer = null;
+function onFlightInput(val) {
+  clearTimeout(_flightTimer);
+  const hint = document.getElementById('flightHint');
+  if (!val || !AVIATIONSTACK_KEY) { if (hint) hint.textContent = ''; return; }
+  if (document.getElementById('editCrew').value !== 'flight') return;
+  if (hint) hint.textContent = '조회 중…';
+  _flightTimer = setTimeout(async () => {
+    const info = await fetchFlightInfo(val);
+    if (info?.note) {
+      document.getElementById('editCrewNote').value = info.note;
+      if (hint) hint.textContent = '시간 자동 입력 ✓';
+    } else {
+      if (hint) hint.textContent = '';
+    }
+  }, 1200);
 }
 
 // ── 실시간 구독 ──
