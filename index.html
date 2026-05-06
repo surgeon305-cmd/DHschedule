@@ -292,6 +292,18 @@
   </div>
 </div>
 
+<!-- 삭제 확인 팝업 -->
+<div class="overlay" id="confirmOverlay" style="display:none">
+  <div class="modal" style="max-width:260px">
+    <div class="modal-title" style="font-size:16px;margin-bottom:8px">일정 삭제</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">삭제하시겠습니까?</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="confirmDeleteNo()">아니오</button>
+      <button class="btn btn-save" style="background:#DC2626;border-color:#DC2626" onclick="confirmDeleteYes()">예</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Supabase: DH 캘린더 ──
 const SUPABASE_URL = 'https://iqnrpyzsylsrvzmrcmti.supabase.co';
@@ -391,6 +403,23 @@ const YP_ROUTES = {
 const AVIATIONSTACK_KEY = ''; // 발급받은 API 키 입력
 const _flightCache = {};
 
+// ── 추가 일정 직렬화 헬퍼 ──
+function parseCustomEvents(title, note, owner) {
+  if (!title) return [];
+  try {
+    const parsed = JSON.parse(title);
+    if (Array.isArray(parsed)) return parsed;
+  } catch(e) {}
+  return [{ title, note: note || '', owner: owner || '함께' }];
+}
+function serializeCustomEvents(events) {
+  return {
+    custom_title: events.length ? JSON.stringify(events) : '',
+    custom_note:  events.length ? (events[0].note  || '') : '',
+    event_owner:  events.length ? (events[0].owner || '함께') : '함께',
+  };
+}
+
 // ── 유틸 ──
 function toKey(y, m, d) {
   return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -463,6 +492,7 @@ function getDayData(dateKey) {
     doc_status:    docStatus,
     is_handover:   isHandover,
     handover_time: handoverTime,
+    custom_events: parseCustomEvents(saved.custom_title || '', saved.custom_note || '', saved.event_owner || '함께'),
     custom_title:  saved.custom_title || '',
     custom_note:   saved.custom_note  || '',
     event_owner:   saved.event_owner  || '함께',
@@ -511,7 +541,7 @@ function renderGrid() {
     if (row.crew_type === 'flight') flights++;
     if (['off','rdo'].includes(row.crew_type)) offs++;
     if (together) togethers++;
-    if (row.custom_title) events++;
+    events += row.custom_events.length;
 
     const holiday = getHoliday(key);
 
@@ -568,13 +598,16 @@ function renderGrid() {
     cell.appendChild(docTag);
 
     // 추가 일정
-    if (row.custom_title) {
+    if (row.custom_events.length > 0) {
+      const ev = row.custom_events[0];
       const evTag = document.createElement('span');
-      const ownerCls = row.event_owner === '도희' ? 'tag-custom-crew'
-                     : row.event_owner === '효중' ? 'tag-custom-doc'
+      const ownerCls = ev.owner === '도희' ? 'tag-custom-crew'
+                     : ev.owner === '효중' ? 'tag-custom-doc'
                      : 'tag-custom';
       evTag.className = 'tag ' + ownerCls;
-      evTag.textContent = '● ' + row.custom_title;
+      evTag.textContent = row.custom_events.length > 1
+        ? `● ${ev.title} +${row.custom_events.length - 1}`
+        : `● ${ev.title}`;
       cell.appendChild(evTag);
     }
 
@@ -618,10 +651,10 @@ function openModal(dateKey) {
   document.getElementById('editFlight').value   = row.crew_flight;
   document.getElementById('editCrewNote').value = row.crew_note;
   document.getElementById('flightHint').textContent = '';
-  document.getElementById('editTitle').value    = row.custom_title;
-  document.getElementById('editNote').value     = row.custom_note;
+  document.getElementById('editTitle').value    = '';
+  document.getElementById('editNote').value     = '';
   document.getElementById('docReadonly').textContent = docLabel(ds, row.is_handover, row.handover_time);
-  setOwner(row.event_owner || '함께');
+  setOwner('함께');
 
   populateViewMode(row);
   enterViewMode();
@@ -654,18 +687,21 @@ function populateViewMode(row) {
   const docText = docLabel(row.doc_status, row.is_handover, row.handover_time);
   const docCls  = row.doc_status === 'on' ? 'tag-doc-on' : row.doc_status === 'off' ? 'tag-doc-off' : 'tag-doc-empty';
   let customHtml = '';
-  if (row.custom_title) {
-    const ownerCls = row.event_owner === '도희' ? 'tag-custom-crew' : row.event_owner === '효중' ? 'tag-custom-doc' : 'tag-custom';
+  if (row.custom_events.length > 0) {
+    const items = row.custom_events.map((ev, idx) => {
+      const ownerCls = ev.owner === '도희' ? 'tag-custom-crew' : ev.owner === '효중' ? 'tag-custom-doc' : 'tag-custom';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;gap:8px">
+        <div style="display:flex;align-items:center;gap:5px;min-width:0;flex:1;overflow:hidden">
+          <span style="font-size:10px;color:var(--text3);flex-shrink:0">${ev.owner}</span>
+          <span class="tag ${ownerCls}" style="font-size:12px;padding:3px 8px;flex-shrink:0">${ev.title}</span>
+          ${ev.note ? `<span style="font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ev.note}</span>` : ''}
+        </div>
+        <button class="btn-del" onclick="showDeleteConfirm(${idx})" style="flex-shrink:0">삭제</button>
+      </div>`;
+    }).join('');
     customHtml = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">추가 일정</div>
-        <button class="btn-del" onclick="deleteCustomEvent()">삭제</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
-        <span style="font-size:11px;color:var(--text3);font-weight:500">${row.event_owner}</span>
-        <span class="tag ${ownerCls}" style="font-size:12px;padding:3px 8px">${row.custom_title}</span>
-        ${row.custom_note ? `<span style="font-size:12px;color:var(--text2)">${row.custom_note}</span>` : ''}
-      </div>
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">추가 일정</div>
+      ${items}
     </div>`;
   }
   document.getElementById('viewMode').innerHTML = `
@@ -704,6 +740,11 @@ function exitEditMode() {
 }
 
 function switchTab(tab) {
+  if (tab === 'custom') {
+    document.getElementById('editTitle').value = '';
+    document.getElementById('editNote').value  = '';
+    setOwner('함께');
+  }
   document.getElementById('tabCrew').style.display    = tab==='crew'   ? 'block' : 'none';
   document.getElementById('tabCustom').style.display  = tab==='custom' ? 'block' : 'none';
   document.getElementById('tabBtnCrew').classList.toggle('active',   tab==='crew');
@@ -721,55 +762,96 @@ function handleOverlayClick(e) {
 
 async function saveEdit() {
   if (!editingDate) return;
-  const day   = parseInt(editingDate.split('-')[2]);
-  const isMay = curYear===2026 && curMonth===4;
-  const def   = isMay ? (CREW_DEFAULT[day] || {}) : {};
-  const crewType = document.getElementById('editCrew').value;
+  const isCustomTab = document.getElementById('tabBtnCustom').classList.contains('active');
 
-  const payload = {
-    crew_type:    crewType,
-    crew_flight:  (crewType==='flight' || crewType==='rest')
-                  ? (document.getElementById('editFlight').value.trim() || def.flight || '')
-                  : '',
-    crew_note:    document.getElementById('editCrewNote').value.trim(),
-    custom_title: document.getElementById('editTitle').value.trim(),
-    custom_note:  document.getElementById('editNote').value.trim(),
-    event_owner:  getSelectedOwner(),
-  };
-
-  loading(true);
-  try {
-    const existing = calData[editingDate];
-    if (existing?.id) {
-      const { error } = await db.from('calendar_events').update(payload).eq('id', existing.id);
-      if (error) throw error;
-      calData[editingDate] = { ...existing, ...payload };
-    } else {
-      const { data, error } = await db.from('calendar_events')
-        .insert({ date: editingDate, ...payload }).select().single();
-      if (error) throw error;
-      calData[editingDate] = data;
+  if (isCustomTab) {
+    const newTitle = document.getElementById('editTitle').value.trim();
+    if (!newTitle) { showToast('일정 제목을 입력해주세요'); return; }
+    const row = getDayData(editingDate);
+    const events = [...row.custom_events, { title: newTitle, note: document.getElementById('editNote').value.trim(), owner: getSelectedOwner() }];
+    const ser = serializeCustomEvents(events);
+    loading(true);
+    try {
+      const existing = calData[editingDate];
+      if (existing?.id) {
+        const { error } = await db.from('calendar_events').update(ser).eq('id', existing.id);
+        if (error) throw error;
+        calData[editingDate] = { ...existing, ...ser };
+      } else {
+        const { data, error } = await db.from('calendar_events')
+          .insert({ date: editingDate, ...ser }).select().single();
+        if (error) throw error;
+        calData[editingDate] = data;
+      }
+      showToast('일정을 추가했어요 ✓');
+    } catch(e) {
+      showToast('저장 실패 — 다시 시도해주세요');
     }
-    showToast('저장됐어요 ✓');
-  } catch(e) {
-    showToast('저장 실패 — 다시 시도해주세요');
+    loading(false);
+    closeModal();
+    renderGrid();
+  } else {
+    const day   = parseInt(editingDate.split('-')[2]);
+    const isMay = curYear===2026 && curMonth===4;
+    const def   = isMay ? (CREW_DEFAULT[day] || {}) : {};
+    const crewType = document.getElementById('editCrew').value;
+    const row = getDayData(editingDate);
+    const payload = {
+      crew_type:   crewType,
+      crew_flight: (crewType==='flight' || crewType==='rest')
+                   ? (document.getElementById('editFlight').value.trim() || def.flight || '')
+                   : '',
+      crew_note:   document.getElementById('editCrewNote').value.trim(),
+      ...serializeCustomEvents(row.custom_events),
+    };
+    loading(true);
+    try {
+      const existing = calData[editingDate];
+      if (existing?.id) {
+        const { error } = await db.from('calendar_events').update(payload).eq('id', existing.id);
+        if (error) throw error;
+        calData[editingDate] = { ...existing, ...payload };
+      } else {
+        const { data, error } = await db.from('calendar_events')
+          .insert({ date: editingDate, ...payload }).select().single();
+        if (error) throw error;
+        calData[editingDate] = data;
+      }
+      showToast('저장됐어요 ✓');
+    } catch(e) {
+      showToast('저장 실패 — 다시 시도해주세요');
+    }
+    loading(false);
+    closeModal();
+    renderGrid();
   }
-  loading(false);
-  closeModal();
-  renderGrid();
 }
 
-async function deleteCustomEvent() {
-  if (!editingDate) return;
+let _deleteIdx = null;
+
+function showDeleteConfirm(idx) {
+  _deleteIdx = idx;
+  document.getElementById('confirmOverlay').style.display = 'flex';
+}
+
+function confirmDeleteNo() {
+  document.getElementById('confirmOverlay').style.display = 'none';
+  _deleteIdx = null;
+}
+
+async function confirmDeleteYes() {
+  document.getElementById('confirmOverlay').style.display = 'none';
+  if (_deleteIdx === null || !editingDate) return;
   const existing = calData[editingDate];
   if (!existing?.id) return;
+  const row = getDayData(editingDate);
+  const events = row.custom_events.filter((_, i) => i !== _deleteIdx);
+  const ser = serializeCustomEvents(events);
   loading(true);
   try {
-    const { error } = await db.from('calendar_events')
-      .update({ custom_title: '', custom_note: '', event_owner: '함께' })
-      .eq('id', existing.id);
+    const { error } = await db.from('calendar_events').update(ser).eq('id', existing.id);
     if (error) throw error;
-    calData[editingDate] = { ...existing, custom_title: '', custom_note: '', event_owner: '함께' };
+    calData[editingDate] = { ...existing, ...ser };
     showToast('일정을 삭제했어요');
     closeModal();
     renderGrid();
@@ -777,6 +859,7 @@ async function deleteCustomEvent() {
     showToast('삭제 실패 — 다시 시도해주세요');
   }
   loading(false);
+  _deleteIdx = null;
 }
 
 // ── 일정 작성자 ──
