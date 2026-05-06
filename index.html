@@ -337,16 +337,25 @@ const CREW_DEFAULT = {
   31: { type:'rdo',    flight:'',          note:'' },
 };
 
-// ── 한국 공휴일 (@hyunbinseo/holidays-kr) ──
-let _isHoliday = null, _getHolidayNames = null;
-function getHoliday(dateKey) {
-  if (!_isHoliday || !_getHolidayNames) return null;
-  try {
-    const date = new Date(dateKey + 'T12:00:00');
-    if (!_isHoliday(date)) return null;
-    return _getHolidayNames(date)?.[0] || null;
-  } catch(e) { return null; }
-}
+// ── 한국 공휴일 (내장 데이터 2025-2026) ──
+const KR_HOLIDAYS = {
+  "2025-01-01":"1월 1일","2025-01-27":"임시공휴일","2025-01-28":"설날 전날",
+  "2025-01-29":"설날","2025-01-30":"설날 다음 날","2025-03-01":"3ㆍ1절",
+  "2025-03-03":"대체공휴일(3ㆍ1절)","2025-05-05":"어린이날",
+  "2025-05-06":"대체공휴일(부처님 오신 날)","2025-06-03":"임시공휴일",
+  "2025-06-06":"현충일","2025-08-15":"광복절","2025-10-03":"개천절",
+  "2025-10-05":"추석 전날","2025-10-06":"추석","2025-10-07":"추석 다음 날",
+  "2025-10-08":"대체공휴일(추석)","2025-10-09":"한글날","2025-12-25":"기독탄신일",
+  "2026-01-01":"1월 1일","2026-02-16":"설날 전날","2026-02-17":"설날",
+  "2026-02-18":"설날 다음 날","2026-03-01":"3ㆍ1절","2026-03-02":"대체공휴일(3ㆍ1절)",
+  "2026-05-01":"노동절","2026-05-05":"어린이날","2026-05-24":"부처님 오신 날",
+  "2026-05-25":"대체공휴일(부처님 오신 날)","2026-06-03":"전국동시지방선거",
+  "2026-06-06":"현충일","2026-07-17":"제헌절","2026-08-15":"광복절",
+  "2026-08-17":"대체공휴일(광복절)","2026-09-24":"추석 전날","2026-09-25":"추석",
+  "2026-09-26":"추석 다음 날","2026-10-03":"개천절","2026-10-05":"대체공휴일(개천절)",
+  "2026-10-09":"한글날","2026-12-25":"기독탄신일",
+};
+function getHoliday(dateKey) { return KR_HOLIDAYS[dateKey] || null; }
 
 const TAG_CLASS  = { flight:'tag-flight', rest:'tag-flight', off:'tag-off', rdo:'tag-rdo', stb:'tag-stb', sth:'tag-sth' };
 const CREW_LABEL = { flight:'항공편', rest:'REST', off:'OFF', rdo:'RDO', stb:'STB 대기', sth:'STH 자택' };
@@ -983,10 +992,7 @@ db.channel('dh-calendar-changes')
   })
   .subscribe();
 
-import('https://cdn.jsdelivr.net/npm/@hyunbinseo/holidays-kr@3/dist/index.min.js')
-  .then(m => { _isHoliday = m.isHoliday; _getHolidayNames = m.getHolidayNames; })
-  .catch(() => {})
-  .finally(() => fetchData());
+fetchData();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

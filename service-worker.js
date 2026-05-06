@@ -1,4 +1,4 @@
-const CACHE = 'dh-cal-v5';
+const CACHE = 'dh-cal-v6';
 const ASSETS = [
   '/DHschedule/',
   '/DHschedule/index.html',
