@@ -931,11 +931,24 @@ async function saveRoster() {
 
   loading(true);
   try {
-    const { error } = await db.from('calendar_events')
-      .upsert(rows, { onConflict: 'date' });
-    if (error) throw error;
-    rows.forEach(r => { calData[r.date] = { ...(calData[r.date] || {}), ...r }; });
-    showToast(`${rows.length}일 저장됐어요 ✓`);
+    let saved = 0;
+    for (const row of rows) {
+      const existing = calData[row.date];
+      if (existing?.id) {
+        const { error } = await db.from('calendar_events')
+          .update({ crew_type: row.crew_type, crew_flight: row.crew_flight, crew_note: row.crew_note })
+          .eq('id', existing.id);
+        if (error) throw error;
+        calData[row.date] = { ...existing, ...row };
+      } else {
+        const { data, error } = await db.from('calendar_events')
+          .insert(row).select().single();
+        if (error) throw error;
+        calData[row.date] = data;
+      }
+      saved++;
+    }
+    showToast(`${saved}일 저장됐어요 ✓`);
   } catch(err) {
     showToast('저장 실패 — ' + (err.message || '다시 시도해주세요'));
   }
