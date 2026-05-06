@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/date-holidays@3/dist/date-holidays.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <style>
   :root {
     --bg: #F7F5F0; --bg2: #EFEDE6; --bg3: #E5E2D8;
@@ -57,11 +58,12 @@
   .day:hover { border-color: var(--border2); box-shadow: 0 2px 8px rgba(0,0,0,.06); z-index: 1; }
   .day.empty { background: transparent; border-color: transparent; cursor: default; pointer-events: none; }
   .day.together { background: var(--together-bg); border-color: var(--together-border); }
-  .day.today { border-color: var(--accent); border-width: 1.5px; }
+  .day.today { border-color: #DC2626; border-width: 1.5px; }
   .day-num { font-size: 12px; font-weight: 500; color: var(--text); font-family: 'DM Mono', monospace; line-height: 1; margin-bottom: 2px; }
   .day.saturday .day-num { color: #2563EB; }
   .day.sunday   .day-num { color: #DC2626; }
   .day.together .day-num { color: #7A6010; }
+  .day.today .day-num { font-weight: 700; color: #DC2626; }
   .tag-holiday { background: #FEE2E2; color: #991B1B; font-size: 8.5px; padding: 1px 4px; border-radius: 3px; font-weight: 600; flex-shrink: 0; }
   .divider-line { height: 1px; background: var(--border); margin: 1px 0; flex-shrink: 0; }
   .tag { font-size: 9.5px; font-weight: 500; padding: 2px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; flex-shrink: 0; }
@@ -82,6 +84,14 @@
   .owner-btn { flex: 1; padding: 7px 4px; font-size: 12px; font-weight: 500; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text2); cursor: pointer; transition: all .15s; font-family: 'Noto Sans KR', sans-serif; }
   .owner-btn.active { border-color: var(--accent); color: var(--text); background: var(--together-bg); }
   .fetch-hint { font-size: 10px; color: var(--text3); margin-top: 3px; min-height: 14px; }
+  .upload-btn { padding: 6px 12px; font-size: 12px; font-weight: 500; font-family: 'Noto Sans KR', sans-serif; background: var(--card); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text2); cursor: pointer; transition: all .15s; white-space: nowrap; }
+  .upload-btn:hover { background: var(--bg2); color: var(--text); }
+  .roster-modal { max-width: 460px; }
+  .roster-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .roster-table th { font-size: 10px; color: var(--text3); text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); letter-spacing: .06em; text-transform: uppercase; }
+  .roster-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .roster-table tr:last-child td { border-bottom: none; }
+  .roster-tag { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 3px; display: inline-block; }
 
   .summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-top: 1.25rem; }
   .sum-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
@@ -132,8 +142,12 @@
       <h1>도희 · 효중</h1>
       <div class="sub">공유 캘린더 · 실시간 동기화</div>
     </div>
-    <div class="sync-label"><span class="status-dot"></span>Live</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="upload-btn" onclick="triggerRosterUpload()">📄 로스터 업로드</button>
+      <div class="sync-label"><span class="status-dot"></span>Live</div>
+    </div>
   </div>
+  <input type="file" id="rosterFileInput" accept=".pdf" style="display:none" onchange="handleRosterFile(event)">
 
   <div class="people-row">
     <div class="person-badge"><div class="person-avatar avatar-crew">DH</div><span>도희 — 승무원</span></div>
@@ -222,6 +236,19 @@
   </div>
 </div>
 
+<!-- 로스터 업로드 미리보기 모달 -->
+<div class="overlay" id="rosterOverlay" style="display:none" onclick="handleRosterOverlayClick(event)">
+  <div class="modal roster-modal">
+    <div class="modal-title" style="margin-bottom:4px">📄 로스터 미리보기</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px" id="rosterSubtitle"></div>
+    <div id="rosterTableWrap" style="overflow-y:auto;max-height:52vh;margin-bottom:14px;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeRosterModal()">취소</button>
+      <button class="btn btn-save" onclick="saveRoster()">저장</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Supabase: DH 캘린더 ──
 const SUPABASE_URL = 'https://iqnrpyzsylsrvzmrcmti.supabase.co';
@@ -282,10 +309,28 @@ const TAG_CLASS  = { flight:'tag-flight', rest:'tag-flight', off:'tag-off', rdo:
 const CREW_LABEL = { flight:'항공편', rest:'REST', off:'OFF', rdo:'RDO', stb:'STB 대기', sth:'STH 자택' };
 const DOW_KR     = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
 
-// REST일 체류 도시 (귀국편 번호 → 출발 도시)
-const LAYOVER_CITY = {
-  'YP102': 'LAX',  // Los Angeles
-  // 항공사 확인 후 추가: YP112, YP622, YP132 등
+// YP 노선 테이블 (REST일 체류 도시 표시에 사용)
+const YP_ROUTES = {
+  'YP101': { dest: 'LAX', destKr: '로스앤젤레스' },
+  'YP102': { dest: 'LAX', destKr: '로스앤젤레스' },
+  'YP103': { dest: 'LAX', destKr: '로스앤젤레스' },
+  'YP104': { dest: 'LAX', destKr: '로스앤젤레스' },
+  'YP111': { dest: 'SFO', destKr: '샌프란시스코' },
+  'YP112': { dest: 'SFO', destKr: '샌프란시스코' },
+  'YP131': { dest: 'JFK', destKr: '뉴욕'         },
+  'YP132': { dest: 'JFK', destKr: '뉴욕'         },
+  'YP135': { dest: 'IAD', destKr: '워싱턴'       },
+  'YP136': { dest: 'IAD', destKr: '워싱턴'       },
+  'YP151': { dest: 'HNL', destKr: '하와이'       },
+  'YP152': { dest: 'HNL', destKr: '하와이'       },
+  'YP621': { dest: 'DAD', destKr: '다낭'         },
+  'YP622': { dest: 'DAD', destKr: '다낭'         },
+  'YP731': { dest: 'NRT', destKr: '나리타'       },
+  'YP732': { dest: 'NRT', destKr: '나리타'       },
+  'YP735': { dest: 'NRT', destKr: '나리타'       },
+  'YP736': { dest: 'NRT', destKr: '나리타'       },
+  'YP801': { dest: 'HKG', destKr: '홍콩'         },
+  'YP802': { dest: 'HKG', destKr: '홍콩'         },
 };
 
 // AviationStack API (https://aviationstack.com — 무료: 월 100회)
@@ -358,7 +403,7 @@ function getDayData(dateKey) {
   }
 
   return {
-    crew_type:     saved.crew_type    ?? def.type   ?? 'off',
+    crew_type:     saved.crew_type    ?? def.type   ?? null,
     crew_flight:   saved.crew_flight  ?? def.flight ?? '',
     crew_note:     saved.crew_note    ?? def.note   ?? '',
     doc_status:    docStatus,
@@ -372,7 +417,7 @@ function getDayData(dateKey) {
 
 function isTogether(dateKey) {
   const r = getDayData(dateKey);
-  return ['off','rdo'].includes(r.crew_type) && r.doc_status === 'off';
+  return r.crew_type !== null && ['off','rdo'].includes(r.crew_type) && r.doc_status === 'off';
 }
 
 function docLabel(docStatus, isHandover, handoverTime) {
@@ -431,25 +476,28 @@ function renderGrid() {
       mark.className = 'together-mark'; mark.textContent = '✦'; cell.appendChild(mark);
     }
 
-    // 도희 태그
-    const crewTag = document.createElement('span');
-    crewTag.className = 'tag ' + (TAG_CLASS[row.crew_type] || 'tag-off');
-    let crewText;
-    if (row.crew_type === 'flight' && row.crew_flight) {
-      crewText = row.crew_flight;
-    } else if (row.crew_type === 'rest') {
-      crewText = 'REST';
-      const city = LAYOVER_CITY[row.crew_flight];
-      if (city) crewText += ' · ' + city;
-    } else {
-      crewText = CREW_LABEL[row.crew_type] || row.crew_type;
-    }
-    crewTag.textContent = crewText;
-    cell.appendChild(crewTag);
+    // 도희 태그 (DB 또는 기본값 없으면 건너뜀)
+    if (row.crew_type !== null) {
+      const crewTag = document.createElement('span');
+      crewTag.className = 'tag ' + (TAG_CLASS[row.crew_type] || 'tag-off');
+      let crewText;
+      if (row.crew_type === 'flight' && row.crew_flight) {
+        crewText = row.crew_flight;
+      } else if (row.crew_type === 'rest') {
+        crewText = 'REST';
+        const flightKey = (row.crew_flight || '').split('/')[0];
+        const city = YP_ROUTES[flightKey]?.destKr;
+        if (city) crewText += ' · ' + city;
+      } else {
+        crewText = CREW_LABEL[row.crew_type] || row.crew_type;
+      }
+      crewTag.textContent = crewText;
+      cell.appendChild(crewTag);
 
-    if (row.crew_note) {
-      const nt = document.createElement('span');
-      nt.className = 'tag tag-rest'; nt.textContent = row.crew_note; cell.appendChild(nt);
+      if (row.crew_note) {
+        const nt = document.createElement('span');
+        nt.className = 'tag tag-rest'; nt.textContent = row.crew_note; cell.appendChild(nt);
+      }
     }
 
     // 구분선
@@ -619,6 +667,167 @@ function onFlightInput(val) {
       if (hint) hint.textContent = '';
     }
   }, 1200);
+}
+
+// ── PDF.js 워커 설정 ──
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+}
+
+// ── 로스터 업로드 ──
+let _rosterParsed = [];
+
+function triggerRosterUpload() {
+  document.getElementById('rosterFileInput').value = '';
+  document.getElementById('rosterFileInput').click();
+}
+
+async function handleRosterFile(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  loading(true);
+  try {
+    const text = await extractPdfText(file);
+    _rosterParsed = parseRosterText(text);
+    if (!_rosterParsed.length) throw new Error('파싱된 일정이 없습니다');
+    showRosterPreview();
+  } catch(err) {
+    showToast('파싱 실패 — ' + (err.message || 'PDF 형식 확인 필요'));
+  }
+  loading(false);
+}
+
+async function extractPdfText(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let full = '';
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    full += content.items.map(it => it.str).join(' ') + '\n';
+  }
+  return full;
+}
+
+function parseRosterText(text) {
+  const tokens = text.split(/[\s\n\r]+/).filter(t => t.trim());
+  const entries = [];
+  let cur = null;
+
+  for (const t of tokens) {
+    // 날짜 숫자 (1~31)
+    if (/^\d{1,2}$/.test(t)) {
+      const d = parseInt(t);
+      if (d >= 1 && d <= 31) {
+        if (cur) entries.push(cur);
+        cur = { day: d, type: null, flight: '', note: '' };
+        continue;
+      }
+    }
+    if (!cur) continue;
+
+    // YP 편명 (YP801, YP801/802, YP801/YP802)
+    if (/^YP\d{3,4}(?:\/(?:YP)?\d{3,4})?$/i.test(t)) {
+      const code = t.toUpperCase();
+      if (!cur.type) { cur.type = 'flight'; cur.flight = code; }
+      else if (!cur.flight) cur.flight = code; // REST + 귀국편
+      continue;
+    }
+
+    // 상태 코드
+    if (/^(OFF|RDO|REST|STB|STH)$/i.test(t)) {
+      if (!cur.type) cur.type = t.toLowerCase();
+      continue;
+    }
+
+    // 시간 패턴: HHMM(L)~HHMM(L) / HHMM(L)~ / ~HHMM(L)
+    let m;
+    if ((m = t.match(/^(\d{4})(?:\(L\)|L)?~(\d{4})(?:\(L\)|L)?$/))) {
+      cur.note = (cur.note ? cur.note + ' ' : '') + `${m[1]}~${m[2]}`;
+    } else if ((m = t.match(/^(\d{4})(?:\(L\)|L)?~$/))) {
+      cur.note = (cur.note ? cur.note + ' ' : '') + `${m[1]}~`;
+    } else if ((m = t.match(/^~(\d{4})(?:\(L\)|L)?$/))) {
+      cur.note = (cur.note ? cur.note + ' ' : '') + `~${m[1]}`;
+    }
+  }
+  if (cur) entries.push(cur);
+  return entries.filter(e => e.type !== null);
+}
+
+function rosterTypeStyle(type) {
+  const map = {
+    flight: `background:var(--crew-bg);color:var(--crew-text)`,
+    rest:   `background:var(--crew-bg);color:var(--crew-text)`,
+    off:    `background:var(--off-bg);color:var(--off-text)`,
+    rdo:    `background:var(--rdo-bg);color:var(--rdo-text)`,
+    stb:    `background:var(--stb-bg);color:var(--stb-text)`,
+    sth:    `background:var(--sth-bg);color:var(--sth-text)`,
+  };
+  return map[type] || `background:var(--off-bg);color:var(--off-text)`;
+}
+
+function showRosterPreview() {
+  const yr = curYear, mo = curMonth + 1;
+  const mm = String(mo).padStart(2, '0');
+  document.getElementById('rosterSubtitle').textContent =
+    `${yr}년 ${mo}월 로스터 — ${_rosterParsed.length}일 파싱됨`;
+
+  const labelMap = { flight:'항공편', rest:'REST', off:'OFF', rdo:'RDO', stb:'STB', sth:'STH' };
+  let rows = _rosterParsed.map(e => {
+    const flightKey = (e.flight || '').split('/')[0];
+    const destKr = e.type === 'rest' ? (YP_ROUTES[flightKey]?.destKr || '') : '';
+    const typeLabel = e.type === 'flight'
+      ? (e.flight || '항공편')
+      : (labelMap[e.type] || e.type) + (destKr ? ` · ${destKr}` : '');
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace;font-weight:600">${yr}-${mm}-${String(e.day).padStart(2,'0')}</td>
+      <td><span class="roster-tag" style="${rosterTypeStyle(e.type)}">${typeLabel}</span></td>
+      <td style="color:var(--text2)">${e.type === 'rest' && e.flight ? e.flight : ''}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--text2)">${e.note || ''}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('rosterTableWrap').innerHTML = `
+    <table class="roster-table">
+      <thead><tr><th>날짜</th><th>구분</th><th>편명</th><th>시간</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  document.getElementById('rosterOverlay').style.display = 'flex';
+}
+
+function closeRosterModal() {
+  document.getElementById('rosterOverlay').style.display = 'none';
+}
+
+function handleRosterOverlayClick(e) {
+  if (e.target === document.getElementById('rosterOverlay')) closeRosterModal();
+}
+
+async function saveRoster() {
+  if (!_rosterParsed.length) return;
+  const mm = String(curMonth + 1).padStart(2, '0');
+  const rows = _rosterParsed.map(e => ({
+    date:        `${curYear}-${mm}-${String(e.day).padStart(2, '0')}`,
+    crew_type:   e.type,
+    crew_flight: e.flight || '',
+    crew_note:   e.note   || '',
+  }));
+
+  loading(true);
+  try {
+    const { error } = await db.from('calendar_events')
+      .upsert(rows, { onConflict: 'date' });
+    if (error) throw error;
+    rows.forEach(r => { calData[r.date] = { ...(calData[r.date] || {}), ...r }; });
+    showToast(`${rows.length}일 저장됐어요 ✓`);
+  } catch(err) {
+    showToast('저장 실패 — ' + (err.message || '다시 시도해주세요'));
+  }
+  loading(false);
+  closeRosterModal();
+  renderGrid();
 }
 
 // ── 실시간 구독 ──
