@@ -250,7 +250,7 @@ const CREW_DEFAULT = {
   31: { type:'rdo',    flight:'',          note:'' },
 };
 
-const TAG_CLASS  = { flight:'tag-flight', rest:'tag-rest', off:'tag-off', rdo:'tag-rdo', stb:'tag-stb', sth:'tag-sth' };
+const TAG_CLASS  = { flight:'tag-flight', rest:'tag-flight', off:'tag-off', rdo:'tag-rdo', stb:'tag-stb', sth:'tag-sth' };
 const CREW_LABEL = { flight:'항공편', rest:'REST', off:'OFF', rdo:'RDO', stb:'STB 대기', sth:'STH 자택' };
 const DOW_KR     = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
 
@@ -309,20 +309,22 @@ function getDayData(dateKey) {
   const def   = isMay ? (CREW_DEFAULT[day] || {}) : {};
   const jumun = jumunData[dateKey];
 
-  let docStatus = 'unknown', isHandover = false;
+  let docStatus = 'unknown', isHandover = false, handoverTime = null;
   if (jumun) {
-    docStatus  = jumun.worker === '효중' ? 'on' : 'off';
-    isHandover = !!jumun.is_handover;
+    docStatus    = jumun.worker === '효중' ? 'on' : 'off';
+    isHandover   = !!jumun.is_handover;
+    handoverTime = jumun.handover_time || null;
   }
 
   return {
-    crew_type:    saved.crew_type    ?? def.type   ?? 'off',
-    crew_flight:  saved.crew_flight  ?? def.flight ?? '',
-    crew_note:    saved.crew_note    ?? def.note   ?? '',
-    doc_status:   docStatus,
-    is_handover:  isHandover,
-    custom_title: saved.custom_title || '',
-    custom_note:  saved.custom_note  || '',
+    crew_type:     saved.crew_type    ?? def.type   ?? 'off',
+    crew_flight:   saved.crew_flight  ?? def.flight ?? '',
+    crew_note:     saved.crew_note    ?? def.note   ?? '',
+    doc_status:    docStatus,
+    is_handover:   isHandover,
+    handover_time: handoverTime,
+    custom_title:  saved.custom_title || '',
+    custom_note:   saved.custom_note  || '',
   };
 }
 
@@ -331,10 +333,11 @@ function isTogether(dateKey) {
   return ['off','rdo'].includes(r.crew_type) && r.doc_status === 'off';
 }
 
-function docLabel(docStatus, isHandover) {
-  if (docStatus === 'on')  return isHandover ? '🔄 섬근무' : '섬 근무';
-  if (docStatus === 'off') return isHandover ? '🔄 육지'   : '효중 육지';
-  return '효중 미입력';
+function docLabel(docStatus, isHandover, handoverTime) {
+  const ferry = handoverTime ? handoverTime.split(' ')[0] : ''; // '1항차'
+  if (docStatus === 'on')  return isHandover ? `섬근무 🔄${ferry}` : '섬근무';
+  if (docStatus === 'off') return isHandover ? `휴무 🔄${ferry}`   : '휴무';
+  return '미입력';
 }
 
 // ── 캘린더 렌더 ──
@@ -396,7 +399,7 @@ function renderGrid() {
     const ds = row.doc_status;
     const docTag = document.createElement('span');
     docTag.className = 'tag ' + (ds==='on'?'tag-doc-on':ds==='off'?'tag-doc-off':'tag-doc-empty');
-    docTag.textContent = docLabel(ds, row.is_handover);
+    docTag.textContent = docLabel(ds, row.is_handover, row.handover_time);
     cell.appendChild(docTag);
 
     // 추가 일정
@@ -441,7 +444,7 @@ function openModal(dateKey) {
   document.getElementById('editFlight').value = row.crew_flight;
   document.getElementById('editTitle').value  = row.custom_title;
   document.getElementById('editNote').value   = row.custom_note;
-  document.getElementById('docReadonly').textContent = docLabel(ds, row.is_handover);
+  document.getElementById('docReadonly').textContent = docLabel(ds, row.is_handover, row.handover_time);
 
   switchTab('crew');
   document.getElementById('overlay').style.display = 'flex';
