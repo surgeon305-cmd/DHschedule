@@ -58,7 +58,7 @@
   .cal-wrapper { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
   .cal-dow-cell { text-align: center; font-size: 11px; font-weight: 500; color: var(--text3); padding: 4px 0; letter-spacing: .08em; }
 
-  .day { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 8px 8px; min-height: 90px; cursor: pointer; transition: border-color .15s, box-shadow .15s; position: relative; display: flex; flex-direction: column; gap: 3px; }
+  .day { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 6px 7px; min-height: 78px; cursor: pointer; transition: border-color .15s, box-shadow .15s; position: relative; display: flex; flex-direction: column; gap: 3px; }
   .day:hover { border-color: var(--border2); box-shadow: 0 2px 8px rgba(0,0,0,.06); z-index: 1; }
   .day.empty { background: transparent; border-color: transparent; cursor: default; pointer-events: none; }
   .day.together { background: var(--together-bg); border-color: var(--together-border); }
@@ -147,12 +147,13 @@
     .legend { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 0.75rem; padding: 8px 10px; gap: 6px 14px; }
     .legend-item { font-size: 10.5px; white-space: nowrap; }
     .cal-wrapper { gap: 2px; }
-    .cal-dow-cell { font-size: 10.5px; padding: 3px 0; }
-    .day { min-height: 82px; padding: 4px 3px 5px; gap: 2px; }
-    .day-num { font-size: 11px; margin-bottom: 1px; }
-    .tag { font-size: 8px; padding: 1px 3px; border-radius: 3px; }
-    .tag-holiday { font-size: 7.5px; padding: 1px 3px; }
+    .cal-dow-cell { font-size: 10px; padding: 2px 0; }
+    .day { min-height: 65px; padding: 3px 3px 4px; gap: 1px; }
+    .day-num { font-size: 10.5px; margin-bottom: 1px; }
+    .tag { font-size: 7.5px; padding: 1px 3px; border-radius: 3px; line-height: 1.4; }
+    .tag-holiday { font-size: 7px; padding: 1px 2px; }
     .divider-line { margin: 0; }
+    .together-mark { font-size: 8px; }
     .summary { grid-template-columns: repeat(2,1fr); gap: 6px; margin-top: 0.75rem; }
     .sum-card { padding: 10px 12px; }
     .sum-val { font-size: 18px; }
@@ -522,30 +523,21 @@ function renderGrid() {
       mark.className = 'together-mark'; mark.textContent = '✦'; cell.appendChild(mark);
     }
 
-    // 도희 태그 (DB 또는 기본값 없으면 건너뜀)
+    // 도희 태그 (DB 또는 기본값 없으면 건너뜀) — 그리드는 약식, 상세는 팝업
     if (row.crew_type !== null) {
       const crewTag = document.createElement('span');
       crewTag.className = 'tag ' + (TAG_CLASS[row.crew_type] || 'tag-off');
       let crewText;
       if (row.crew_type === 'flight' && row.crew_flight) {
-        const fKey = row.crew_flight.split('/')[0];
-        const destKr = YP_ROUTES[fKey]?.destKr;
-        crewText = destKr ? `${row.crew_flight} · ${destKr}` : row.crew_flight;
+        crewText = row.crew_flight.split('/')[0]; // YP801만 표시
       } else if (row.crew_type === 'rest') {
         crewText = 'REST';
-        const flightKey = (row.crew_flight || '').split('/')[0];
-        const city = YP_ROUTES[flightKey]?.destKr;
-        if (city) crewText += ' · ' + city;
       } else {
         crewText = CREW_LABEL[row.crew_type] || row.crew_type;
       }
       crewTag.textContent = crewText;
       cell.appendChild(crewTag);
-
-      if (row.crew_note) {
-        const nt = document.createElement('span');
-        nt.className = 'tag tag-rest'; nt.textContent = row.crew_note; cell.appendChild(nt);
-      }
+      // crew_note(시간)는 팝업에서만 표시
     }
 
     // 구분선
