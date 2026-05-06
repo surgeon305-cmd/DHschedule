@@ -55,9 +55,8 @@
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text2); }
   .legend-pip { width: 20px; height: 6px; border-radius: 3px; flex-shrink: 0; }
 
-  .cal-dow { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; margin-bottom: 3px; }
-  .cal-dow div { text-align: center; font-size: 11px; font-weight: 500; color: var(--text3); padding: 4px 0; letter-spacing: .08em; }
-  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
+  .cal-wrapper { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
+  .cal-dow-cell { text-align: center; font-size: 11px; font-weight: 500; color: var(--text3); padding: 4px 0; letter-spacing: .08em; }
 
   .day { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 8px 8px; min-height: 90px; cursor: pointer; transition: border-color .15s, box-shadow .15s; position: relative; display: flex; flex-direction: column; gap: 3px; }
   .day:hover { border-color: var(--border2); box-shadow: 0 2px 8px rgba(0,0,0,.06); z-index: 1; }
@@ -107,8 +106,15 @@
   .overlay { position: fixed; inset: 0; background: rgba(20,18,14,.5); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(2px); }
   .modal { background: var(--card); border: 1px solid var(--border2); border-radius: 14px; padding: 1.5rem; width: 100%; max-width: 320px; animation: slideUp .2s ease; }
   @keyframes slideUp { from{transform:translateY(12px);opacity:0} to{transform:translateY(0);opacity:1} }
+  .modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1rem; gap: 8px; }
   .modal-date { font-size: 13px; color: var(--text3); font-family: 'DM Mono', monospace; margin-bottom: 4px; }
-  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 1rem; letter-spacing: -0.02em; }
+  .modal-title { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+  .modal-edit-btn { padding: 5px 12px; font-size: 12px; font-weight: 500; font-family: 'Noto Sans KR', sans-serif; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text2); cursor: pointer; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+  .modal-edit-btn:hover { background: var(--bg2); color: var(--text); }
+  .view-section { margin-bottom: 12px; }
+  .view-section-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+  .view-flight-link { font-size: 13px; font-weight: 600; color: var(--crew-text); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; background: var(--crew-bg); padding: 4px 10px; border-radius: 5px; }
+  .view-flight-link:hover { text-decoration: underline; }
 
   .modal-tabs { display: flex; background: var(--bg); border-radius: var(--radius-sm); padding: 3px; margin-bottom: 1rem; }
   .modal-tab { flex: 1; padding: 7px 4px; font-size: 12px; font-weight: 500; font-family: 'Noto Sans KR', sans-serif; background: transparent; border: none; border-radius: 4px; color: var(--text2); cursor: pointer; transition: all .15s; }
@@ -130,10 +136,27 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   @media (max-width: 600px) {
-    .day { min-height: 72px; padding: 5px 5px 6px; }
-    .tag { font-size: 8.5px; padding: 1px 4px; }
-    .summary { grid-template-columns: repeat(2,1fr); }
-    .header-left h1 { font-size: 20px; }
+    .page { padding: 0.6rem 0.35rem 2rem; }
+    .header { margin-bottom: 0.75rem; padding-bottom: 0.75rem; }
+    .header-left h1 { font-size: 18px; }
+    .header-left .sub { font-size: 11px; }
+    .people-row { gap: 6px; margin-bottom: 0.75rem; }
+    .person-badge { padding: 6px 10px; font-size: 11.5px; gap: 6px; }
+    .month-nav { margin-bottom: 0.75rem; padding: 8px 10px; gap: 12px; }
+    .month-nav-label { font-size: 15px; }
+    .legend { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 0.75rem; padding: 8px 10px; gap: 6px 14px; }
+    .legend-item { font-size: 10.5px; white-space: nowrap; }
+    .cal-wrapper { gap: 2px; }
+    .cal-dow-cell { font-size: 10.5px; padding: 3px 0; }
+    .day { min-height: 82px; padding: 4px 3px 5px; gap: 2px; }
+    .day-num { font-size: 11px; margin-bottom: 1px; }
+    .tag { font-size: 8px; padding: 1px 3px; border-radius: 3px; }
+    .tag-holiday { font-size: 7.5px; padding: 1px 3px; }
+    .divider-line { margin: 0; }
+    .summary { grid-template-columns: repeat(2,1fr); gap: 6px; margin-top: 0.75rem; }
+    .sum-card { padding: 10px 12px; }
+    .sum-val { font-size: 18px; }
+    .upload-btn { font-size: 11px; padding: 5px 8px; }
   }
 </style>
 </head>
@@ -174,10 +197,7 @@
     <div class="legend-item"><div class="legend-pip" style="background:var(--together-bg);border:1.5px solid var(--together-border)"></div>함께 있는 날 ✦</div>
   </div>
 
-  <div class="cal-dow">
-    <div style="color:#DC2626">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style="color:#2563EB">토</div>
-  </div>
-  <div class="cal-grid" id="calGrid"></div>
+  <div class="cal-wrapper" id="calWrapper"></div>
 
   <div class="summary">
     <div class="sum-card"><div class="sum-label">비행 일수</div><div class="sum-val" id="sumFlight">—</div></div>
@@ -190,53 +210,65 @@
 <!-- Modal -->
 <div class="overlay" id="overlay" style="display:none" onclick="handleOverlayClick(event)">
   <div class="modal">
-    <div class="modal-date" id="modalDate"></div>
-    <div class="modal-title" id="modalTitle"></div>
-
-    <div class="modal-tabs">
-      <button class="modal-tab active" id="tabBtnCrew" onclick="switchTab('crew')">도희 일정</button>
-      <button class="modal-tab" id="tabBtnCustom" onclick="switchTab('custom')">일정 추가</button>
+    <!-- 헤더 (항상 표시) -->
+    <div class="modal-header">
+      <div>
+        <div class="modal-date" id="modalDate"></div>
+        <div class="modal-title" id="modalTitle"></div>
+      </div>
+      <button class="modal-edit-btn" id="modalEditBtn" onclick="enterEditMode()">수정 ✎</button>
     </div>
 
-    <!-- 탭1: 도희 일정 -->
-    <div id="tabCrew">
-      <div class="section-label" style="margin-top:0">도희 — 승무원</div>
-      <select id="editCrew">
-        <option value="flight">✈ 항공편 근무</option>
-        <option value="rest">REST (비행 중 체류)</option>
-        <option value="off">OFF</option>
-        <option value="rdo">RDO (요청 휴무)</option>
-        <option value="stb">STB — 공항 대기</option>
-        <option value="sth">STH — 자택 대기</option>
-      </select>
-      <div style="margin-top:6px">
-        <input type="text" id="editFlight" placeholder="항공편 번호 (예: YP801/802)" oninput="onFlightInput(this.value)" />
-      </div>
-      <div style="margin-top:6px">
-        <input type="text" id="editCrewNote" placeholder="시간 메모 (예: 0735~1845)" />
-      </div>
-      <div class="fetch-hint" id="flightHint"></div>
-      <div class="section-label">효중 — 섬 근무 현황 (자동 연동)</div>
-      <div class="doc-readonly" id="docReadonly">—</div>
-    </div>
+    <!-- 뷰 모드 (기본) -->
+    <div id="viewMode"></div>
 
-    <!-- 탭2: 일정 추가 -->
-    <div id="tabCustom" style="display:none">
-      <div class="section-label" style="margin-top:0">누구의 일정?</div>
-      <div class="owner-selector">
-        <button class="owner-btn active" data-owner="함께" onclick="setOwner('함께')">함께</button>
-        <button class="owner-btn" data-owner="도희" onclick="setOwner('도희')">도희</button>
-        <button class="owner-btn" data-owner="효중" onclick="setOwner('효중')">효중</button>
+    <!-- 편집 모드 -->
+    <div id="editMode" style="display:none">
+      <div class="modal-tabs">
+        <button class="modal-tab active" id="tabBtnCrew" onclick="switchTab('crew')">도희 일정</button>
+        <button class="modal-tab" id="tabBtnCustom" onclick="switchTab('custom')">일정 추가</button>
       </div>
-      <div class="section-label">일정 제목</div>
-      <input type="text" id="editTitle" placeholder="예: 데이트, 병원, 가족모임" />
-      <div class="section-label">메모 (선택)</div>
-      <input type="text" id="editNote" placeholder="메모" />
-    </div>
 
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal()">취소</button>
-      <button class="btn btn-save" onclick="saveEdit()">저장</button>
+      <!-- 탭1: 도희 일정 -->
+      <div id="tabCrew">
+        <div class="section-label" style="margin-top:0">도희 — 승무원</div>
+        <select id="editCrew">
+          <option value="flight">✈ 항공편 근무</option>
+          <option value="rest">REST (비행 중 체류)</option>
+          <option value="off">OFF</option>
+          <option value="rdo">RDO (요청 휴무)</option>
+          <option value="stb">STB — 공항 대기</option>
+          <option value="sth">STH — 자택 대기</option>
+        </select>
+        <div style="margin-top:6px">
+          <input type="text" id="editFlight" placeholder="항공편 번호 (예: YP801/802)" oninput="onFlightInput(this.value)" />
+        </div>
+        <div style="margin-top:6px">
+          <input type="text" id="editCrewNote" placeholder="시간 메모 (예: 0735~1845)" />
+        </div>
+        <div class="fetch-hint" id="flightHint"></div>
+        <div class="section-label">효중 — 섬 근무 현황 (자동 연동)</div>
+        <div class="doc-readonly" id="docReadonly">—</div>
+      </div>
+
+      <!-- 탭2: 일정 추가 -->
+      <div id="tabCustom" style="display:none">
+        <div class="section-label" style="margin-top:0">누구의 일정?</div>
+        <div class="owner-selector">
+          <button class="owner-btn active" data-owner="함께" onclick="setOwner('함께')">함께</button>
+          <button class="owner-btn" data-owner="도희" onclick="setOwner('도희')">도희</button>
+          <button class="owner-btn" data-owner="효중" onclick="setOwner('효중')">효중</button>
+        </div>
+        <div class="section-label">일정 제목</div>
+        <input type="text" id="editTitle" placeholder="예: 데이트, 병원, 가족모임" />
+        <div class="section-label">메모 (선택)</div>
+        <input type="text" id="editNote" placeholder="메모" />
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn" onclick="exitEditMode()">취소</button>
+        <button class="btn btn-save" onclick="saveEdit()">저장</button>
+      </div>
     </div>
   </div>
 </div>
@@ -434,11 +466,20 @@ function docLabel(docStatus, isHandover, handoverTime) {
 
 // ── 캘린더 렌더 ──
 function renderGrid() {
-  const grid = document.getElementById('calGrid');
+  const grid = document.getElementById('calWrapper');
   grid.innerHTML = '';
   const total    = daysInMonth(curYear, curMonth);
   const startDow = new Date(curYear, curMonth, 1).getDay();
   let flights=0, offs=0, togethers=0, events=0;
+
+  // 요일 헤더
+  [['일','#DC2626'],['월',''],['화',''],['수',''],['목',''],['금',''],['토','#2563EB']].forEach(([text, color]) => {
+    const h = document.createElement('div');
+    h.className = 'cal-dow-cell';
+    h.textContent = text;
+    if (color) h.style.color = color;
+    grid.appendChild(h);
+  });
 
   for (let i=0; i<startDow; i++) {
     const e = document.createElement('div'); e.className='day empty'; grid.appendChild(e);
@@ -568,8 +609,80 @@ function openModal(dateKey) {
   document.getElementById('docReadonly').textContent = docLabel(ds, row.is_handover, row.handover_time);
   setOwner(row.event_owner || '함께');
 
-  switchTab('crew');
+  populateViewMode(row);
+  enterViewMode();
   document.getElementById('overlay').style.display = 'flex';
+}
+
+function populateViewMode(row) {
+  const fKey = (row.crew_flight || '').split('/')[0];
+  const destKr = fKey ? (YP_ROUTES[fKey]?.destKr || '') : '';
+  let crewHtml = '';
+  if (row.crew_type === 'flight' && row.crew_flight) {
+    const fr24 = `https://www.flightradar24.com/data/flights/${fKey.toLowerCase()}`;
+    crewHtml = `<a href="${fr24}" target="_blank" rel="noopener noreferrer" class="view-flight-link">✈ ${row.crew_flight}${destKr ? ' · ' + destKr : ''} <span style="font-size:10px;opacity:.5">↗</span></a>`;
+  } else if (row.crew_type === 'rest') {
+    const restText = destKr ? `REST · ${destKr}` : 'REST';
+    crewHtml = `<span class="tag tag-flight" style="font-size:12px;padding:3px 8px">${restText}</span>`;
+    if (row.crew_flight) {
+      const fr24 = `https://www.flightradar24.com/data/flights/${fKey.toLowerCase()}`;
+      crewHtml += ` <a href="${fr24}" target="_blank" rel="noopener noreferrer" class="view-flight-link" style="font-size:11px">귀국편 ${row.crew_flight} ↗</a>`;
+    }
+  } else if (row.crew_type !== null) {
+    const tagCls = TAG_CLASS[row.crew_type] || 'tag-off';
+    crewHtml = `<span class="tag ${tagCls}" style="font-size:12px;padding:3px 8px">${CREW_LABEL[row.crew_type] || row.crew_type}</span>`;
+  } else {
+    crewHtml = '<span style="font-size:13px;color:var(--text3)">—</span>';
+  }
+  if (row.crew_note && row.crew_type !== null) {
+    crewHtml += `<span class="tag tag-rest" style="font-size:11px;padding:2px 7px;margin-left:6px">${row.crew_note}</span>`;
+  }
+  const docText = docLabel(row.doc_status, row.is_handover, row.handover_time);
+  const docCls  = row.doc_status === 'on' ? 'tag-doc-on' : row.doc_status === 'off' ? 'tag-doc-off' : 'tag-doc-empty';
+  let customHtml = '';
+  if (row.custom_title) {
+    const ownerCls = row.event_owner === '도희' ? 'tag-custom-crew' : row.event_owner === '효중' ? 'tag-custom-doc' : 'tag-custom';
+    customHtml = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">추가 일정</div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+        <span class="tag ${ownerCls}" style="font-size:12px;padding:3px 8px">${row.custom_title}</span>
+        ${row.custom_note ? `<span style="font-size:12px;color:var(--text2)">${row.custom_note}</span>` : ''}
+      </div>
+    </div>`;
+  }
+  document.getElementById('viewMode').innerHTML = `
+    <div style="margin-bottom:12px">
+      <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">도희</div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">${crewHtml}</div>
+    </div>
+    <div style="height:1px;background:var(--border);margin:0 0 12px"></div>
+    <div>
+      <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">효중</div>
+      <span class="tag ${docCls}" style="font-size:12px;padding:3px 8px">${docText}</span>
+    </div>
+    ${customHtml}
+    <div class="modal-actions" style="margin-top:1.25rem">
+      <button class="btn btn-save" onclick="closeModal()">닫기</button>
+    </div>`;
+}
+
+function enterViewMode() {
+  document.getElementById('viewMode').style.display = 'block';
+  document.getElementById('editMode').style.display = 'none';
+  document.getElementById('modalEditBtn').style.display = 'inline-block';
+}
+
+function enterEditMode() {
+  document.getElementById('viewMode').style.display = 'none';
+  document.getElementById('editMode').style.display = 'block';
+  document.getElementById('modalEditBtn').style.display = 'none';
+  switchTab('crew');
+}
+
+function exitEditMode() {
+  const row = getDayData(editingDate);
+  populateViewMode(row);
+  enterViewMode();
 }
 
 function switchTab(tab) {
