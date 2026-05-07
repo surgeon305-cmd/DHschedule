@@ -139,6 +139,8 @@
   .toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--bg); font-size: 13px; padding: 10px 20px; border-radius: 99px; opacity: 0; transition: all .25s; z-index: 999; pointer-events: none; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  .header-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .btn-short { display: none; }
   .time-clocks { display: flex; gap: 6px; }
   .time-clock { display: flex; flex-direction: column; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 10px; min-width: 60px; }
   .time-clock-label { font-size: 9px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; line-height: 1.4; }
@@ -171,8 +173,16 @@
     .summary { grid-template-columns: repeat(2,1fr); gap: 6px; margin-top: 0.75rem; }
     .sum-card { padding: 10px 12px; }
     .sum-val { font-size: 18px; }
+    .header { align-items: center; }
+    .header-right { gap: 5px; flex-wrap: nowrap; }
     .upload-btn { font-size: 11px; padding: 5px 8px; }
-    .time-clocks { display: none; }
+    .sync-label { display: none; }
+    .time-clock { padding: 3px 7px; min-width: 50px; }
+    .time-clock-val { font-size: 13px; }
+    .time-clock-label { font-size: 8px; }
+    .time-clock-tz { font-size: 8px; }
+    .btn-full { display: none; }
+    .btn-short { display: inline; }
   }
 </style>
 </head>
@@ -186,7 +196,7 @@
       <h1>도희 · 효중</h1>
       <div class="sub">공유 캘린더 · 실시간 동기화</div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+    <div class="header-right">
       <div class="time-clocks">
         <div class="time-clock">
           <span class="time-clock-label">도희</span>
@@ -199,7 +209,7 @@
           <span class="time-clock-tz">KST</span>
         </div>
       </div>
-      <button class="upload-btn" onclick="triggerRosterUpload()">📄 로스터 업로드</button>
+      <button class="upload-btn" onclick="triggerRosterUpload()"><span class="btn-full">📄 로스터 업로드</span><span class="btn-short">📄 로스터</span></button>
       <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()" title="새로고침">↻</button>
       <div class="sync-label"><span class="status-dot"></span>Live</div>
     </div>
