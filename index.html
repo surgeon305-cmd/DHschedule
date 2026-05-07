@@ -139,6 +139,16 @@
   .toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--bg); font-size: 13px; padding: 10px 20px; border-radius: 99px; opacity: 0; transition: all .25s; z-index: 999; pointer-events: none; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  .time-clocks { display: flex; gap: 6px; }
+  .time-clock { display: flex; flex-direction: column; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 10px; min-width: 60px; }
+  .time-clock-label { font-size: 9px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; line-height: 1.4; }
+  .time-clock-val { font-size: 15px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: -0.02em; line-height: 1.2; }
+  .time-clock-tz { font-size: 9px; color: var(--text3); font-family: 'DM Mono', monospace; line-height: 1.4; }
+  .refresh-btn { width: 28px; height: 28px; border: 1px solid var(--border2); background: var(--bg); border-radius: var(--radius-sm); font-size: 17px; cursor: pointer; color: var(--text2); transition: background .15s, color .15s; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; flex-shrink: 0; }
+  .refresh-btn:hover { background: var(--bg2); color: var(--text); }
+  .refresh-btn.spinning { animation: spin .5s linear; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
   @media (max-width: 600px) {
     .page { padding: 0.6rem 0.35rem 2rem; }
     .header { margin-bottom: 0.75rem; padding-bottom: 0.75rem; }
@@ -162,6 +172,7 @@
     .sum-card { padding: 10px 12px; }
     .sum-val { font-size: 18px; }
     .upload-btn { font-size: 11px; padding: 5px 8px; }
+    .time-clocks { display: none; }
   }
 </style>
 </head>
@@ -175,8 +186,21 @@
       <h1>도희 · 효중</h1>
       <div class="sub">공유 캘린더 · 실시간 동기화</div>
     </div>
-    <div style="display:flex;align-items:center;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+      <div class="time-clocks">
+        <div class="time-clock">
+          <span class="time-clock-label">도희</span>
+          <span class="time-clock-val" id="clockDH">--:--</span>
+          <span class="time-clock-tz" id="clockDHZone">—</span>
+        </div>
+        <div class="time-clock">
+          <span class="time-clock-label">효중</span>
+          <span class="time-clock-val" id="clockHJ">--:--</span>
+          <span class="time-clock-tz">KST</span>
+        </div>
+      </div>
       <button class="upload-btn" onclick="triggerRosterUpload()">📄 로스터 업로드</button>
+      <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()" title="새로고침">↻</button>
       <div class="sync-label"><span class="status-dot"></span>Live</div>
     </div>
   </div>
@@ -398,6 +422,40 @@ const YP_ROUTES = {
   'YP801': { dest: 'HKG', destKr: '홍콩'         },
   'YP802': { dest: 'HKG', destKr: '홍콩'         },
 };
+
+// 목적지 → 시간대 매핑
+const DEST_TIMEZONE = {
+  'LAX': 'America/Los_Angeles',
+  'SFO': 'America/Los_Angeles',
+  'JFK': 'America/New_York',
+  'IAD': 'America/New_York',
+  'HNL': 'Pacific/Honolulu',
+  'DAD': 'Asia/Ho_Chi_Minh',
+  'NRT': 'Asia/Tokyo',
+  'HKG': 'Asia/Hong_Kong',
+};
+
+function getDoheeLocation() {
+  const row = getDayData(TODAY_KEY);
+  if (row.crew_type === 'rest') {
+    const fKey = (row.crew_flight || '').split('/')[0];
+    const dest = YP_ROUTES[fKey]?.dest;
+    if (dest && DEST_TIMEZONE[dest]) return dest;
+  }
+  return 'ICN';
+}
+
+function updateClocks() {
+  const now = new Date();
+  const fmt = tz => now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz, hour12: false });
+  document.getElementById('clockHJ').textContent = fmt('Asia/Seoul');
+  const loc = getDoheeLocation();
+  const tz  = loc === 'ICN' ? 'Asia/Seoul' : (DEST_TIMEZONE[loc] || 'Asia/Seoul');
+  document.getElementById('clockDH').textContent     = fmt(tz);
+  document.getElementById('clockDHZone').textContent = loc;
+}
+setInterval(updateClocks, 1000);
+updateClocks();
 
 // AviationStack API (https://aviationstack.com — 무료: 월 100회)
 const AVIATIONSTACK_KEY = ''; // 발급받은 API 키 입력
@@ -1100,6 +1158,28 @@ db.channel('dh-calendar-changes')
     }
   })
   .subscribe();
+
+// 주문도 교대 스케줄 실시간 구독
+jumunDb.channel('jumun-schedule-changes')
+  .on('postgres_changes', { event:'*', schema:'public', table:'schedule' }, payload => {
+    const row = payload.new;
+    if (row?.date) {
+      const prefix = `${curYear}-${String(curMonth+1).padStart(2,'0')}`;
+      if (row.date.startsWith(prefix)) {
+        jumunData[row.date] = row;
+        renderGrid();
+      }
+    }
+  })
+  .subscribe();
+
+// ── 수동 새로고침 ──
+async function manualRefresh() {
+  const btn = document.getElementById('refreshBtn');
+  btn?.classList.add('spinning');
+  await fetchData();
+  setTimeout(() => btn?.classList.remove('spinning'), 500);
+}
 
 fetchData();
 
