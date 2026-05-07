@@ -524,11 +524,14 @@ async function fetchData() {
       jumunDb.from('schedule').select('*').gte('date', from).lte('date', to),
     ]);
     if (e1) throw e1;
-    if (e2) console.warn('jumun 로드 실패:', e2.message);
     calData = {};
     (evRows || []).forEach(r => { calData[r.date] = r; });
     jumunData = {};
-    (jRows || []).forEach(r => { jumunData[r.date] = r; });
+    if (e2) {
+      console.warn('jumun 로드 실패:', e2.message);
+    } else {
+      (jRows || []).forEach(r => { jumunData[r.date] = r; });
+    }
   } catch(e) {
     showToast('데이터 불러오기 실패 — 오프라인 모드');
   }
@@ -1167,19 +1170,42 @@ db.channel('dh-calendar-changes')
   })
   .subscribe();
 
-// 주문도 교대 스케줄 실시간 구독
+// ── 주문도 스케줄 단독 갱신 ──
+async function fetchJumunOnly() {
+  const mm   = String(curMonth + 1).padStart(2, '0');
+  const from = `${curYear}-${mm}-01`;
+  const to   = `${curYear}-${mm}-31`;
+  const { data: jRows, error } = await jumunDb
+    .from('schedule').select('*').gte('date', from).lte('date', to);
+  if (error) { console.warn('jumun 갱신 실패:', error.message); return; }
+  jumunData = {};
+  (jRows || []).forEach(r => { jumunData[r.date] = r; });
+  renderGrid();
+}
+
+// 주문도 실시간 구독 (DB에 replication 설정 시 동작)
 jumunDb.channel('jumun-schedule-changes')
-  .on('postgres_changes', { event:'*', schema:'public', table:'schedule' }, payload => {
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule' }, payload => {
+    if (payload.eventType === 'DELETE') {
+      if (payload.old?.date) delete jumunData[payload.old.date];
+      renderGrid();
+      return;
+    }
     const row = payload.new;
-    if (row?.date) {
-      const prefix = `${curYear}-${String(curMonth+1).padStart(2,'0')}`;
-      if (row.date.startsWith(prefix)) {
-        jumunData[row.date] = row;
-        renderGrid();
-      }
+    if (!row?.date) return;
+    const prefix = `${curYear}-${String(curMonth + 1).padStart(2, '0')}`;
+    if (row.date.startsWith(prefix)) {
+      jumunData[row.date] = row;
+      renderGrid();
     }
   })
-  .subscribe();
+  .subscribe(status => {
+    // 구독 실패 시 즉시 한 번 폴링으로 보완
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') fetchJumunOnly();
+  });
+
+// 60초마다 jumun 스케줄 재조회 (실시간 구독 fallback)
+setInterval(fetchJumunOnly, 60000);
 
 // ── 수동 새로고침 ──
 async function manualRefresh() {
