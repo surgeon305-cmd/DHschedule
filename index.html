@@ -464,8 +464,6 @@ function updateClocks() {
   document.getElementById('clockDH').textContent     = fmt(tz);
   document.getElementById('clockDHZone').textContent = loc;
 }
-setInterval(updateClocks, 1000);
-updateClocks();
 
 // AviationStack API (https://aviationstack.com — 무료: 월 100회)
 const AVIATIONSTACK_KEY = ''; // 발급받은 API 키 입력
@@ -1190,6 +1188,10 @@ async function manualRefresh() {
   await fetchData();
   setTimeout(() => btn?.classList.remove('spinning'), 500);
 }
+
+// TODAY_KEY · getDayData 정의 후 시계 시작
+setInterval(updateClocks, 1000);
+updateClocks();
 
 fetchData();
 
