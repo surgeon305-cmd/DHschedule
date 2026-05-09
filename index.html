@@ -344,6 +344,34 @@ const SUPABASE_URL = 'https://iqnrpyzsylsrvzmrcmti.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_kWe4qSgbog0oekVa0cnhCw_5ByBm91z';
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+const APP_VERSION = 'dh-analytics-v1';
+
+function getAnalyticsId() {
+  const key = 'dh_analytics_id';
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID ? crypto.randomUUID() : `anon-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
+const ANALYTICS_ID = getAnalyticsId();
+const SESSION_ID = crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+function trackEvent(eventName, metadata = {}) {
+  db.from('analytics_events').insert({
+    event_name: eventName,
+    project: 'DHschedule',
+    anonymous_id: ANALYTICS_ID,
+    session_id: SESSION_ID,
+    page_path: location.pathname,
+    metadata,
+    app_version: APP_VERSION,
+  }).then(({ error }) => {
+    if (error) console.debug('analytics skipped:', error.message);
+  }).catch(() => {});
+}
 
 // ── Supabase: 주문도 스케줄 (읽기 전용) ──
 const JUMUN_URL = 'https://qwudsfmedjunkuqkgrpv.supabase.co';
@@ -695,21 +723,25 @@ function updateMonthLabel() {
 }
 function prevMonth() {
   if (curMonth===0){curYear--;curMonth=11;}else curMonth--;
+  trackEvent('month_prev', { year: curYear, month: curMonth + 1 });
   updateMonthLabel(); fetchData();
 }
 function nextMonth() {
   if (curMonth===11){curYear++;curMonth=0;}else curMonth++;
+  trackEvent('month_next', { year: curYear, month: curMonth + 1 });
   updateMonthLabel(); fetchData();
 }
 function goToday() {
   const now = new Date();
   curYear = now.getFullYear(); curMonth = now.getMonth();
+  trackEvent('go_today', { year: curYear, month: curMonth + 1 });
   updateMonthLabel(); fetchData();
 }
 
 // ── 모달 ──
 function openModal(dateKey) {
   editingDate = dateKey;
+  trackEvent('date_open', { date: dateKey });
   const parts = dateKey.split('-').map(Number);
   const row   = getDayData(dateKey);
   const ds    = row.doc_status;
@@ -796,6 +828,7 @@ function enterViewMode() {
 }
 
 function enterEditMode() {
+  trackEvent('edit_open', { date: editingDate });
   document.getElementById('viewMode').style.display = 'none';
   document.getElementById('editMode').style.display = 'block';
   document.getElementById('modalEditBtn').style.display = 'none';
@@ -809,6 +842,7 @@ function exitEditMode() {
 }
 
 function switchTab(tab) {
+  trackEvent('modal_tab_change', { tab, date: editingDate });
   if (tab === 'custom') {
     document.getElementById('editTitle').value = '';
     document.getElementById('editNote').value  = '';
@@ -852,6 +886,7 @@ async function saveEdit() {
         if (error) throw error;
         calData[editingDate] = data;
       }
+      trackEvent('custom_event_add', { date: editingDate, owner: getSelectedOwner(), event_count: events.length });
       showToast('일정을 추가했어요 ✓');
     } catch(e) {
       showToast('저장 실패 — 다시 시도해주세요');
@@ -886,6 +921,7 @@ async function saveEdit() {
         if (error) throw error;
         calData[editingDate] = data;
       }
+      trackEvent('crew_schedule_save', { date: editingDate, crew_type: crewType, has_flight: !!payload.crew_flight });
       showToast('저장됐어요 ✓');
     } catch(e) {
       showToast('저장 실패 — 다시 시도해주세요');
@@ -921,6 +957,7 @@ async function confirmDeleteYes() {
     const { error } = await db.from('calendar_events').update(ser).eq('id', existing.id);
     if (error) throw error;
     calData[editingDate] = { ...existing, ...ser };
+    trackEvent('custom_event_delete', { date: editingDate, remaining_count: events.length });
     showToast('일정을 삭제했어요');
     closeModal();
     renderGrid();
@@ -991,6 +1028,7 @@ if (typeof pdfjsLib !== 'undefined') {
 let _rosterParsed = [];
 
 function triggerRosterUpload() {
+  trackEvent('roster_upload_start', { year: curYear, month: curMonth + 1 });
   document.getElementById('rosterFileInput').value = '';
   document.getElementById('rosterFileInput').click();
 }
@@ -1003,6 +1041,7 @@ async function handleRosterFile(e) {
     const text = await extractPdfText(file);
     _rosterParsed = parseRosterText(text);
     if (!_rosterParsed.length) throw new Error('파싱된 일정이 없습니다');
+    trackEvent('roster_parse_success', { rows: _rosterParsed.length, year: curYear, month: curMonth + 1 });
     showRosterPreview();
   } catch(err) {
     showToast('파싱 실패 — ' + (err.message || 'PDF 형식 확인 필요'));
@@ -1146,6 +1185,7 @@ async function saveRoster() {
       }
       saved++;
     }
+    trackEvent('roster_save', { rows: saved, year: curYear, month: curMonth + 1 });
     showToast(`${saved}일 저장됐어요 ✓`);
   } catch(err) {
     showToast('저장 실패 — ' + (err.message || '다시 시도해주세요'));
@@ -1209,6 +1249,7 @@ setInterval(fetchJumunOnly, 60000);
 
 // ── 수동 새로고침 ──
 async function manualRefresh() {
+  trackEvent('manual_refresh', { year: curYear, month: curMonth + 1 });
   const btn = document.getElementById('refreshBtn');
   btn?.classList.add('spinning');
   await fetchData();
@@ -1219,6 +1260,9 @@ async function manualRefresh() {
 setInterval(updateClocks, 1000);
 updateClocks();
 
+trackEvent('app_open', {
+  standalone: window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
+});
 fetchData();
 
 if ('serviceWorker' in navigator) {
