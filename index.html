@@ -832,7 +832,7 @@ function enterEditMode() {
   document.getElementById('viewMode').style.display = 'none';
   document.getElementById('editMode').style.display = 'block';
   document.getElementById('modalEditBtn').style.display = 'none';
-  switchTab('crew');
+  switchTab('crew', false);
 }
 
 function exitEditMode() {
@@ -841,8 +841,8 @@ function exitEditMode() {
   enterViewMode();
 }
 
-function switchTab(tab) {
-  trackEvent('modal_tab_change', { tab, date: editingDate });
+function switchTab(tab, track = true) {
+  if (track) trackEvent('modal_tab_change', { tab, date: editingDate });
   if (tab === 'custom') {
     document.getElementById('editTitle').value = '';
     document.getElementById('editNote').value  = '';
