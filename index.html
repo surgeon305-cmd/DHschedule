@@ -474,9 +474,17 @@ const DEST_TIMEZONE = {
 };
 
 function getDoheeLocation() {
-  const row = getDayData(TODAY_KEY);
-  if (row.crew_type === 'rest') {
-    const fKey = (row.crew_flight || '').split('/')[0];
+  // getDayData는 curYear/curMonth 기준으로 CREW_DEFAULT를 적용하므로,
+  // 다른 달을 보고 있을 때도 오늘 날짜의 일정을 올바르게 읽기 위해 직접 계산
+  const parts = TODAY_KEY.split('-').map(Number); // [yyyy, mm, dd]
+  const todayYear = parts[0], todayMonth = parts[1] - 1, day = parts[2];
+  const saved = calData[TODAY_KEY] || {};
+  const isMay2026 = todayYear === 2026 && todayMonth === 4;
+  const def = isMay2026 ? (CREW_DEFAULT[day] || {}) : {};
+  const crewType   = saved.crew_type   ?? def.type   ?? null;
+  const crewFlight = saved.crew_flight || def.flight || '';
+  if (crewType === 'rest') {
+    const fKey = crewFlight.split('/')[0];
     const dest = YP_ROUTES[fKey]?.dest;
     if (dest && DEST_TIMEZONE[dest]) return dest;
   }
