@@ -530,7 +530,8 @@ function daysInMonth(y, m) { return new Date(y, m+1, 0).getDate(); }
 const TODAY_KEY = toKey(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
 
 // ── 상태 ──
-let curYear = 2026, curMonth = 4; // 0-indexed (4=5월)
+const _now = new Date();
+let curYear = _now.getFullYear(), curMonth = _now.getMonth(); // 오늘 날짜의 월로 시작
 let calData   = {}; // YYYY-MM-DD → calendar_events row
 let jumunData = {}; // YYYY-MM-DD → schedule row
 let editingDate = null;
