@@ -1282,6 +1282,33 @@ if ('serviceWorker' in navigator) {
     if (e.data?.type === 'SW_UPDATED') window.location.reload();
   });
 }
+
+// ── 새 배포 자동 감지 (서비스 워커 없는 아이폰 인앱 웹뷰 대응) ──
+// 캐시 무시 HEAD 요청으로 서버의 Last-Modified를 읽어, 현재 실행 중인 페이지보다
+// 최신이면 캐시 우회 쿼리를 붙여 1회 자동 새로고침한다. (version 파일 불필요)
+const _localMod = new Date(document.lastModified).getTime();
+let _updateChecking = false;
+async function checkForUpdate() {
+  if (_updateChecking || document.hidden) return;
+  _updateChecking = true;
+  try {
+    const url = location.pathname + '?cb=' + Date.now();
+    const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+    const lm = res.headers.get('Last-Modified');
+    if (lm) {
+      const serverMod = new Date(lm).getTime();
+      // 5초 이상 최신이면 새 배포로 간주 (시계 오차/반올림 여유)
+      if (serverMod - _localMod > 5000) {
+        location.replace(location.pathname + '?v=' + serverMod);
+        return;
+      }
+    }
+  } catch (_) { /* 오프라인 등 — 무시 */ }
+  _updateChecking = false;
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+window.addEventListener('focus', checkForUpdate);
+checkForUpdate();
 </script>
 </body>
 </html>

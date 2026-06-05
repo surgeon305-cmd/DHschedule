@@ -1,4 +1,4 @@
-const CACHE = 'dh-cal-v9';
+const CACHE = 'dh-cal-v10';
 const STATIC_ASSETS = [
   '/DHschedule/icon-180.png',
   '/DHschedule/icon-192.png',
@@ -51,7 +51,7 @@ self.addEventListener('fetch', e => {
     url.pathname === '/DHschedule'
   ) {
     e.respondWith(
-      fetch(e.request)
+      fetch(e.request, { cache: 'reload' }) // 브라우저 HTTP 캐시 우회 → 항상 최신 HTML
         .then(res => {
           if (res && res.ok) {
             const clone = res.clone();
