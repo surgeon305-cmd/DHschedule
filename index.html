@@ -1256,11 +1256,21 @@ jumunDb.channel('jumun-schedule-changes')
 // 60초마다 jumun 스케줄 재조회 (실시간 구독 fallback)
 setInterval(fetchJumunOnly, 60000);
 
-// ── 수동 새로고침 ──
+// ── 수동 새로고침 (데이터 + 앱 코드 강제 최신화) ──
 async function manualRefresh() {
   trackEvent('manual_refresh', { year: curYear, month: curMonth + 1 });
   const btn = document.getElementById('refreshBtn');
   btn?.classList.add('spinning');
+  // 1) 새 SW 있으면 받아오기 → 활성화 시 SW_UPDATED로 자동 리로드
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update();
+    }
+  } catch (_) { /* 무시 */ }
+  // 2) 새 배포 감지되면 캐시 우회 리로드 (아래 fetchData 전에 페이지 이동)
+  await checkForUpdate();
+  // 3) 새 버전이 없으면 데이터만 새로고침
   await fetchData();
   setTimeout(() => btn?.classList.remove('spinning'), 500);
 }
