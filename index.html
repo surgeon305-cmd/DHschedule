@@ -476,14 +476,34 @@ const DEST_TIMEZONE = {
   'HKG': 'Asia/Hong_Kong',
 };
 
+// ── 도희 위치 추론 전용 데이터 (보고 있는 달과 무관하게 '오늘' 기준으로 고정) ──
+// calData는 달 이동 시 그 달 데이터로 교체되므로, 시계용으로 최근 7일치를 따로 보관
+let locData = {}; // YYYY-MM-DD → { crew_type, crew_flight }
+async function fetchLocationData() {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6);
+  const fmt = dt => toKey(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  try {
+    const { data, error } = await db.from('calendar_events')
+      .select('date,crew_type,crew_flight')
+      .gte('date', fmt(start)).lte('date', fmt(today));
+    if (error) throw error;
+    const next = {};
+    (data || []).forEach(r => { next[r.date] = r; });
+    locData = next;
+  } catch (e) { /* 실패 시 기존 locData 유지 (오프라인 대응) */ }
+}
+
 function getDoheeLocation() {
   // 오늘 날짜를 매번 새로 계산 (앱을 계속 띄워둬도 자정에 날짜가 넘어감)
   const t = new Date();
   let y = t.getFullYear(), m = t.getMonth(), d = t.getDate();
 
-  // 특정 날짜 일정 읽기 (저장 데이터 우선, 2026-05월이면 기본 일정 fallback)
+  // 특정 날짜 일정 읽기 (보고 있는 달과 무관한 locData 우선, 2026-05월이면 기본 일정 fallback)
+  // locData에 없으면(아직 로드 전 등) 현재 화면 데이터 calData로 보조
   const readDay = (yy, mm, dd) => {
-    const saved = calData[toKey(yy, mm, dd)] || {};
+    const key = toKey(yy, mm, dd);
+    const saved = locData[key] || calData[key] || {};
     const isMay2026 = yy === 2026 && mm === 4;
     const def = isMay2026 ? (CREW_DEFAULT[dd] || {}) : {};
     return {
@@ -1293,11 +1313,15 @@ async function manualRefresh() {
   // 2) 새 배포 감지되면 캐시 우회 리로드 (아래 fetchData 전에 페이지 이동)
   await checkForUpdate();
   // 3) 새 버전이 없으면 데이터만 새로고침
-  await fetchData();
+  await Promise.all([fetchData(), fetchLocationData()]);
+  updateClocks();
   setTimeout(() => btn?.classList.remove('spinning'), 500);
 }
 
 // TODAY_KEY · getDayData 정의 후 시계 시작
+// 위치 데이터는 보고 있는 달과 무관하게 따로 로드 (시작 시 + 10분마다 갱신)
+fetchLocationData().then(updateClocks);
+setInterval(fetchLocationData, 10 * 60 * 1000);
 setInterval(updateClocks, 1000);
 updateClocks();
 
