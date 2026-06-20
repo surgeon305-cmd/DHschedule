@@ -85,6 +85,7 @@
   .tag-custom      { background: var(--together-bg); color: #7A6010; border: 1px solid var(--together-border); }
   .tag-custom-crew { background: var(--crew-bg); color: var(--crew-text); }
   .tag-custom-doc  { background: var(--doc-bg);  color: var(--doc-text);  }
+  .tag-wish { background: var(--doc-bg); color: var(--doc-text); border: 1px dashed var(--doc-text); opacity: .85; font-weight: 500; }
   .together-mark { position: absolute; top: 5px; right: 6px; font-size: 10px; }
   .owner-selector { display: flex; gap: 6px; margin-bottom: 6px; }
   .owner-btn { flex: 1; padding: 7px 4px; font-size: 12px; font-weight: 500; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text2); cursor: pointer; transition: all .15s; font-family: 'Noto Sans KR', sans-serif; }
@@ -576,6 +577,8 @@ const _now = new Date();
 let curYear = _now.getFullYear(), curMonth = _now.getMonth(); // 오늘 날짜의 월로 시작
 let calData   = {}; // YYYY-MM-DD → calendar_events row
 let jumunData = {}; // YYYY-MM-DD → schedule row
+let wishData  = {}; // YYYY-MM-DD → true (효중 희망일, 주문도 wish_dates)
+let rosterConfirmed = false; // 보고 있는 달의 확정 로스터(schedule) 존재 여부 = 마감
 let editingDate = null;
 
 // ── 로딩 / 토스트 ──
@@ -598,9 +601,10 @@ async function fetchData() {
   const from  = `${curYear}-${mm}-01`;
   const to    = `${curYear}-${mm}-${String(daysInMonth(curYear, curMonth)).padStart(2, '0')}`;
   try {
-    const [{ data: evRows, error: e1 }, { data: jRows, error: e2 }] = await Promise.all([
+    const [{ data: evRows, error: e1 }, { data: jRows, error: e2 }, { data: wRows, error: e3 }] = await Promise.all([
       db.from('calendar_events').select('*').gte('date', from).lte('date', to),
       jumunDb.from('schedule').select('*').gte('date', from).lte('date', to),
+      jumunDb.from('wish_dates').select('date').eq('username', '효중').gte('date', from).lte('date', to),
     ]);
     if (e1) throw e1;
     calData = {};
@@ -610,6 +614,14 @@ async function fetchData() {
       console.warn('jumun 로드 실패:', e2.message);
     } else {
       (jRows || []).forEach(r => { jumunData[r.date] = r; });
+    }
+    // 확정 로스터(schedule)가 이 달에 하나라도 있으면 마감으로 간주
+    rosterConfirmed = !e2 && (jRows || []).length > 0;
+    wishData = {};
+    if (e3) {
+      console.warn('wish_dates 로드 실패:', e3.message);
+    } else {
+      (wRows || []).forEach(r => { wishData[r.date] = true; });
     }
   } catch(e) {
     showToast('데이터 불러오기 실패 — 오프라인 모드');
@@ -744,6 +756,14 @@ function renderGrid() {
     docTag.className = 'tag ' + (ds==='on'?'tag-doc-on':ds==='off'?'tag-doc-off':'tag-doc-empty');
     docTag.textContent = docLabel(ds, row.is_handover, row.handover_time);
     cell.appendChild(docTag);
+
+    // 효중 희망일 (주문도 wish_dates) — 마감 전(로스터 미확정) + 오늘 이후일 때만 표시
+    if (wishData[key] && !rosterConfirmed && key >= TODAY_KEY) {
+      const wishTag = document.createElement('span');
+      wishTag.className = 'tag tag-wish';
+      wishTag.textContent = '⭐희망일';
+      cell.appendChild(wishTag);
+    }
 
     // 추가 일정
     if (row.custom_events.length > 0) {
@@ -1266,11 +1286,18 @@ async function fetchJumunOnly() {
   const mm   = String(curMonth + 1).padStart(2, '0');
   const from = `${curYear}-${mm}-01`;
   const to   = `${curYear}-${mm}-${String(daysInMonth(curYear, curMonth)).padStart(2, '0')}`;
-  const { data: jRows, error } = await jumunDb
-    .from('schedule').select('*').gte('date', from).lte('date', to);
+  const [{ data: jRows, error }, { data: wRows, error: wErr }] = await Promise.all([
+    jumunDb.from('schedule').select('*').gte('date', from).lte('date', to),
+    jumunDb.from('wish_dates').select('date').eq('username', '효중').gte('date', from).lte('date', to),
+  ]);
   if (error) { console.warn('jumun 갱신 실패:', error.message); return; }
   jumunData = {};
   (jRows || []).forEach(r => { jumunData[r.date] = r; });
+  rosterConfirmed = (jRows || []).length > 0;
+  if (!wErr) {
+    wishData = {};
+    (wRows || []).forEach(r => { wishData[r.date] = true; });
+  }
   renderGrid();
 }
 
@@ -1292,6 +1319,21 @@ jumunDb.channel('jumun-schedule-changes')
   })
   .subscribe(status => {
     // 구독 실패 시 즉시 한 번 폴링으로 보완
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') fetchJumunOnly();
+  });
+
+// 주문도 희망일(wish_dates) 실시간 구독 — 효중이 희망일 추가/취소 시 즉시 반영
+jumunDb.channel('jumun-wish-changes')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'wish_dates' }, payload => {
+    const row = payload.new || payload.old;
+    if (!row?.date || row.username !== '효중') return;
+    const prefix = `${curYear}-${String(curMonth + 1).padStart(2, '0')}`;
+    if (!row.date.startsWith(prefix)) return;
+    if (payload.eventType === 'DELETE') delete wishData[row.date];
+    else wishData[row.date] = true;
+    renderGrid();
+  })
+  .subscribe(status => {
     if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') fetchJumunOnly();
   });
 
