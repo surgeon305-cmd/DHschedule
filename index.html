@@ -1328,6 +1328,7 @@ updateClocks();
 trackEvent('app_open', {
   standalone: window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
 });
+updateMonthLabel(); // 시작 시 월 라벨을 오늘 날짜 기준으로 맞춤 (HTML 하드코딩 값 갱신)
 fetchData();
 
 if ('serviceWorker' in navigator) {
