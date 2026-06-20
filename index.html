@@ -474,19 +474,38 @@ const DEST_TIMEZONE = {
 };
 
 function getDoheeLocation() {
-  // getDayData는 curYear/curMonth 기준으로 CREW_DEFAULT를 적용하므로,
-  // 다른 달을 보고 있을 때도 오늘 날짜의 일정을 올바르게 읽기 위해 직접 계산
-  const parts = TODAY_KEY.split('-').map(Number); // [yyyy, mm, dd]
-  const todayYear = parts[0], todayMonth = parts[1] - 1, day = parts[2];
-  const saved = calData[TODAY_KEY] || {};
-  const isMay2026 = todayYear === 2026 && todayMonth === 4;
-  const def = isMay2026 ? (CREW_DEFAULT[day] || {}) : {};
-  const crewType   = saved.crew_type   ?? def.type   ?? null;
-  const crewFlight = saved.crew_flight || def.flight || '';
-  if (crewType === 'rest') {
-    const fKey = crewFlight.split('/')[0];
+  // 오늘 날짜를 매번 새로 계산 (앱을 계속 띄워둬도 자정에 날짜가 넘어감)
+  const t = new Date();
+  let y = t.getFullYear(), m = t.getMonth(), d = t.getDate();
+
+  // 특정 날짜 일정 읽기 (저장 데이터 우선, 2026-05월이면 기본 일정 fallback)
+  const readDay = (yy, mm, dd) => {
+    const saved = calData[toKey(yy, mm, dd)] || {};
+    const isMay2026 = yy === 2026 && mm === 4;
+    const def = isMay2026 ? (CREW_DEFAULT[dd] || {}) : {};
+    return {
+      type:   saved.crew_type   ?? def.type   ?? null,
+      flight: saved.crew_flight || def.flight || '',
+    };
+  };
+
+  // 항공편 번호 → 도착지 코드 (대소문자/공백/슬래시 정규화)
+  const flightDest = (f) => {
+    if (!f) return null;
+    const fKey = f.split('/')[0].trim().toUpperCase();
     const dest = YP_ROUTES[fKey]?.dest;
-    if (dest && DEST_TIMEZONE[dest]) return dest;
+    return (dest && DEST_TIMEZONE[dest]) ? dest : null;
+  };
+
+  // 오늘부터 과거로 연속된 '해외 체류 구간'(rest/flight)을 훑으며 도착지 탐색.
+  // 체류일에 항공편이 비어 있어도, 그 구간을 만든 비행편의 도착지를 위치로 추론.
+  for (let i = 0; i < 6; i++) {
+    const day = readDay(y, m, d);
+    if (day.type !== 'rest' && day.type !== 'flight') break; // off/rdo/sth → 귀국
+    const dest = flightDest(day.flight);
+    if (dest) return dest;
+    const prev = new Date(y, m, d - 1); // 하루 전
+    y = prev.getFullYear(); m = prev.getMonth(); d = prev.getDate();
   }
   return 'ICN';
 }
