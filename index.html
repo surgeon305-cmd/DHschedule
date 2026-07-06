@@ -136,6 +136,16 @@
   .btn-save { background: var(--text); color: var(--bg); border-color: transparent; }
   .btn-save:hover { background: #3A3830; }
 
+  .notif-note { font-size: 12px; color: var(--text2); margin-bottom: 12px; line-height: 1.5; }
+  .notif-list { display: flex; flex-direction: column; gap: 10px; }
+  .notif-row { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+  .notif-cat { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .notif-cat input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--accent); cursor: pointer; }
+  .notif-timing { display: flex; gap: 8px; margin-top: 9px; }
+  .notif-timing select { flex: 0 0 96px; width: auto; padding: 7px 9px; font-size: 12px; }
+  .notif-timing input[type=time] { flex: 1; width: auto; padding: 7px 9px; font-size: 12px; font-family: 'DM Mono', monospace; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text); outline: none; }
+  .notif-timing input[type=time]:focus { border-color: var(--accent); }
+
   .loading-bar { height: 2px; background: var(--accent); width: 0%; position: fixed; top: 0; left: 0; z-index: 999; transition: width .3s; }
   .toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--bg); font-size: 13px; padding: 10px 20px; border-radius: 99px; opacity: 0; transition: all .25s; z-index: 999; pointer-events: none; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -211,6 +221,7 @@
         </div>
       </div>
       <button class="upload-btn" onclick="triggerRosterUpload()"><span class="btn-full">📄 로스터 업로드</span><span class="btn-short">📄 로스터</span></button>
+      <button class="refresh-btn" onclick="openNotifModal()" title="알림 설정">🔔</button>
       <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()" title="새로고침">↻</button>
       <div class="sync-label"><span class="status-dot"></span>Live</div>
     </div>
@@ -339,6 +350,22 @@
   </div>
 </div>
 
+<!-- 알림 설정 모달 -->
+<div class="overlay" id="notifOverlay" style="display:none" onclick="handleNotifOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-date">이 기기 전용 설정</div>
+        <div class="modal-title">🔔 알림</div>
+      </div>
+    </div>
+    <div id="notifBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-save" onclick="closeNotifModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Supabase: DH 캘린더 ──
 const SUPABASE_URL = 'https://iqnrpyzsylsrvzmrcmti.supabase.co';
@@ -359,6 +386,19 @@ function getAnalyticsId() {
 
 const ANALYTICS_ID = getAnalyticsId();
 const SESSION_ID = crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+// ── 기기 식별자 (알림 설정·구독을 기기별로 독립 관리) ──
+// 분석용 ID와 분리해, 알림 정체성이 분석 로직과 얽히지 않도록 전용 키를 쓴다.
+function getDeviceId() {
+  const key = 'dh_device_id';
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID ? crypto.randomUUID() : `dev-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+const DEVICE_ID = getDeviceId();
 
 function trackEvent(eventName, metadata = {}) {
   db.from('analytics_events').insert({
@@ -1265,6 +1305,151 @@ async function saveRoster() {
   closeRosterModal();
   renderGrid();
 }
+
+// ── 알림 (Web Push) ──
+// 공개키만 프론트에 노출 (VAPID 공개키는 공개돼도 안전). 개인키는 Supabase 비밀값.
+const VAPID_PUBLIC_KEY = 'BNtGad1oWOBoGolvCe4tWDwSX03e8dgqQtcryOD_8NV_za0jgzWgyiekxp5OH1LTZjMpX4lGgY7T_Ba0ee0rpcs';
+
+// 알림 카테고리 정의 (라벨 + 기본 시점)
+const NOTIF_CATEGORIES = [
+  { key: 'island_handover', label: '🔄 효중 섬 교대날',        defOffset: 1, defTime: '21:00' },
+  { key: 'together',        label: '✦ 함께 있는 날 · 함께 일정', defOffset: 1, defTime: '21:00' },
+  { key: 'custom_event',    label: '● 개인 추가 일정',          defOffset: 1, defTime: '21:00' },
+];
+
+let notifPrefs = {}; // category -> { enabled, offset_days, at_time }
+
+function urlB64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+// 알림 권한 요청 + 푸시 구독 생성 → Supabase 저장 (기기별 upsert)
+async function enableNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    showToast('이 브라우저는 알림을 지원하지 않아요'); return false;
+  }
+  let perm;
+  try { perm = await Notification.requestPermission(); }
+  catch (_) { showToast('알림 권한 요청 실패'); return false; }
+  if (perm !== 'granted') { showToast('알림 권한이 거부됐어요'); return false; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const json = sub.toJSON();
+    const { error } = await db.from('push_subscriptions').upsert({
+      device_id: DEVICE_ID,
+      endpoint:  sub.endpoint,
+      p256dh:    json.keys.p256dh,
+      auth:      json.keys.auth,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'device_id' });
+    if (error) throw error;
+    trackEvent('notif_enable', {});
+    return true;
+  } catch (e) {
+    console.warn('구독 실패:', e?.message || e);
+    showToast('알림 구독 실패 — 다시 시도해주세요');
+    return false;
+  }
+}
+
+// 기기별 알림 설정 로드 (없으면 기본값 채움)
+async function loadNotifPrefs() {
+  notifPrefs = {};
+  try {
+    const { data, error } = await db.from('notification_prefs').select('*').eq('device_id', DEVICE_ID);
+    if (error) throw error;
+    (data || []).forEach(r => { notifPrefs[r.category] = r; });
+  } catch (e) { console.warn('알림 설정 로드 실패:', e?.message || e); }
+  NOTIF_CATEGORIES.forEach(c => {
+    if (!notifPrefs[c.key]) {
+      notifPrefs[c.key] = { category: c.key, enabled: false, offset_days: c.defOffset, at_time: c.defTime };
+    }
+  });
+}
+
+async function saveNotifPref(category, patch) {
+  const cur = notifPrefs[category] || { enabled: false, offset_days: 1, at_time: '21:00' };
+  const next = { ...cur, ...patch };
+  notifPrefs[category] = next;
+  try {
+    const { error } = await db.from('notification_prefs').upsert({
+      device_id: DEVICE_ID, category,
+      enabled: next.enabled, offset_days: next.offset_days, at_time: next.at_time,
+    }, { onConflict: 'device_id,category' });
+    if (error) throw error;
+  } catch (e) {
+    console.warn('알림 설정 저장 실패:', e?.message || e);
+    showToast('설정 저장 실패');
+  }
+}
+
+// ── 알림 설정 모달 ──
+async function openNotifModal() {
+  trackEvent('notif_settings_open', {});
+  await loadNotifPrefs();
+  renderNotifBody();
+  document.getElementById('notifOverlay').style.display = 'flex';
+}
+function closeNotifModal() { document.getElementById('notifOverlay').style.display = 'none'; }
+function handleNotifOverlayClick(e) {
+  if (e.target === document.getElementById('notifOverlay')) closeNotifModal();
+}
+
+function renderNotifBody() {
+  const body = document.getElementById('notifBody');
+  const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+  let head = '';
+  if (perm === 'unsupported') {
+    head = `<div class="notif-note">이 브라우저는 웹 알림을 지원하지 않아요.</div>`;
+  } else if (perm === 'denied') {
+    head = `<div class="notif-note">알림이 차단돼 있어요. 브라우저·기기 설정에서 이 사이트 알림을 허용해 주세요.</div>`;
+  } else if (perm !== 'granted') {
+    head = `<button class="btn btn-save" style="width:100%;margin-bottom:10px" onclick="turnOnNotifications()">이 기기에서 알림 켜기</button>
+            <div class="notif-note">📱 아이폰은 홈 화면에 추가한 앱에서만 알림이 옵니다.</div>`;
+  } else {
+    head = `<div class="notif-note" style="color:var(--doc-text)">✓ 이 기기에서 알림이 켜져 있어요</div>`;
+  }
+  const disabled = perm !== 'granted';
+  const rows = NOTIF_CATEGORIES.map(c => {
+    const p = notifPrefs[c.key];
+    return `<div class="notif-row">
+      <label class="notif-cat">
+        <input type="checkbox" ${p.enabled ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="onNotifToggle('${c.key}', this.checked)">
+        <span>${c.label}</span>
+      </label>
+      <div class="notif-timing"${p.enabled ? '' : ' style="opacity:.4;pointer-events:none"'}>
+        <select onchange="onNotifOffset('${c.key}', this.value)" ${disabled ? 'disabled' : ''}>
+          <option value="0" ${p.offset_days == 0 ? 'selected' : ''}>당일</option>
+          <option value="1" ${p.offset_days == 1 ? 'selected' : ''}>전날</option>
+          <option value="2" ${p.offset_days == 2 ? 'selected' : ''}>이틀 전</option>
+        </select>
+        <input type="time" value="${p.at_time}" ${disabled ? 'disabled' : ''} onchange="onNotifTime('${c.key}', this.value)">
+      </div>
+    </div>`;
+  }).join('');
+  body.innerHTML = head + `<div class="notif-list">${rows}</div>`;
+}
+
+async function turnOnNotifications() {
+  const ok = await enableNotifications();
+  renderNotifBody();
+  if (ok) showToast('알림을 켰어요 ✓');
+}
+async function onNotifToggle(cat, checked) { await saveNotifPref(cat, { enabled: checked }); renderNotifBody(); }
+async function onNotifOffset(cat, val)     { await saveNotifPref(cat, { offset_days: parseInt(val) }); }
+async function onNotifTime(cat, val)       { await saveNotifPref(cat, { at_time: val }); }
 
 // ── 실시간 구독 ──
 db.channel('dh-calendar-changes')

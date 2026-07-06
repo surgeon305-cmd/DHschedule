@@ -1,4 +1,4 @@
-const CACHE = 'dh-cal-v10';
+const CACHE = 'dh-cal-v11';
 const STATIC_ASSETS = [
   '/DHschedule/icon-180.png',
   '/DHschedule/icon-192.png',
@@ -70,5 +70,35 @@ self.addEventListener('fetch', e => {
       if (res && res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
       return res;
     }))
+  );
+});
+
+// ── Web Push 수신 → 알림 표시 ──
+self.addEventListener('push', e => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; }
+  catch (_) { data = { body: e.data ? e.data.text() : '' }; }
+  const title = data.title || '도희 · 효중 캘린더';
+  const options = {
+    body:  data.body || '',
+    icon:  '/DHschedule/icon-192.png',
+    badge: '/DHschedule/icon-192.png',
+    tag:   data.tag || undefined,          // 같은 tag면 알림 덮어씀 (중복 방지)
+    data:  { url: data.url || '/DHschedule/' },
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+// ── 알림 탭 → 앱 열기(이미 열려 있으면 포커스) ──
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/DHschedule/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+      for (const c of clients) {
+        if (c.url.includes('/DHschedule') && 'focus' in c) return c.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
   );
 });
