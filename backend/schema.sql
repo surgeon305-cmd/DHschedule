@@ -56,8 +56,10 @@ alter table notifications_sent enable row level security;
 drop policy if exists "anon all push_subscriptions" on push_subscriptions;
 drop policy if exists "anon all notification_prefs" on notification_prefs;
 drop policy if exists "anon all notification_subs"  on notification_subs;
+drop policy if exists "anon all notifications_sent" on notifications_sent;
 
 create policy "anon all push_subscriptions" on push_subscriptions for all to anon using (true) with check (true);
 create policy "anon all notification_prefs" on notification_prefs for all to anon using (true) with check (true);
 create policy "anon all notification_subs"  on notification_subs  for all to anon using (true) with check (true);
--- notifications_sent 는 서버(service_role)만 쓰므로 익명 정책 없음.
+-- Edge Function 이 (새 키 형식에서) anon 권한으로 도는 경우가 있어, 중복방지 로그도 anon 쓰기 허용.
+create policy "anon all notifications_sent" on notifications_sent for all to anon using (true) with check (true);

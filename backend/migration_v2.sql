@@ -28,4 +28,7 @@ create table notifications_sent (
   primary key (device_id, date, item_key)
 );
 alter table notifications_sent enable row level security;
--- 서버(service_role)만 쓰므로 익명 정책 없음
+-- Edge Function 이 anon 권한으로 도는 경우 대비 — 중복방지 로그 anon 쓰기 허용
+drop policy if exists "anon all notifications_sent" on notifications_sent;
+create policy "anon all notifications_sent" on notifications_sent
+  for all to anon using (true) with check (true);
