@@ -1,4 +1,4 @@
-const CACHE = 'dh-cal-v11';
+const CACHE = 'dh-cal-v12';
 const STATIC_ASSETS = [
   '/DHschedule/icon-180.png',
   '/DHschedule/icon-192.png',

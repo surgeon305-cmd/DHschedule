@@ -20,9 +20,14 @@
 
 ---
 
+> **모델**: opt-in — 사용자가 각 날짜를 열어 일정 옆 🔔을 켠 것만 알림이 갑니다.
+> 상단 🔔 탭은 종류별 "시점(몇 시)"만 정합니다.
+
 ## 1. 테이블 생성
 
-대시보드 → **SQL Editor** → `backend/schema.sql` 내용 붙여넣기 → **Run**
+- **처음 세팅**: 대시보드 → **SQL Editor** → `backend/schema.sql` 전체 붙여넣기 → **Run**
+- **이미 예전 스키마를 실행했다면**: `backend/migration_v2.sql` 만 실행
+  (notification_subs 추가 + notifications_sent 를 item_key 단위로 교체)
 
 ## 2. Edge Function 배포
 
